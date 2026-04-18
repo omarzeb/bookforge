@@ -1,0 +1,41 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check app/
+
+      - name: Type check (mypy)
+        run: mypy app/
+
+      - name: Run tests
+        run: pytest tests/ -v
+        env:
+          APP_ENV: test
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
+          FERNET_KEY: ${{ secrets.TEST_FERNET_KEY }}
+          JWT_SECRET: test-secret
