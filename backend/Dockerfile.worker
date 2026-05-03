@@ -1,0 +1,36 @@
+# Same base image as the API — same codebase, different entrypoint.
+# The worker is launched as a one-shot Fargate task per job in production.
+
+# ── Stage 1: base ─────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: development ──────────────────────────────────────────────────────
+FROM base AS development
+
+RUN pip install --no-cache-dir watchfiles
+
+COPY . .
+
+CMD ["python", "-m", "app.workers.runner"]
+
+# ── Stage 3: production ───────────────────────────────────────────────────────
+FROM base AS production
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+COPY --chown=appuser:appgroup . .
+
+USER appuser
+
+# Entrypoint takes --job-id argument: Fargate passes it when launching the task
+ENTRYPOINT ["python", "-m", "app.workers.runner"]
