@@ -1,9 +1,9 @@
-# ── Stage 1: base — shared deps ───────────────────────────────────────────────
+# ── Stage 1: base — install deps ──────────────────────────────────────────────
 FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# System deps needed to compile asyncpg + cryptography
+# gcc + libpq-dev needed to compile asyncpg and psycopg2 headers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
@@ -22,10 +22,10 @@ COPY . .
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
-# ── Stage 3: production — non-root user, no extras ───────────────────────────
+# ── Stage 3: production ───────────────────────────────────────────────────────
 FROM base AS production
 
-# Run as non-root for security (App Runner requirement)
+# Non-root user — required by App Runner and good practice everywhere
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 COPY --chown=appuser:appgroup . .
@@ -34,5 +34,10 @@ USER appuser
 
 EXPOSE 8080
 
-# Single worker — App Runner scales via instances, not threads
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Single uvicorn worker — App Runner scales via instances, not threads.
+# --no-access-log reduces CloudWatch noise (structlog handles request logging).
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8080", \
+     "--workers", "1", \
+     "--no-access-log"]

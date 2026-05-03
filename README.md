@@ -2,8 +2,8 @@
 
 > AI-powered multi-user book generation platform — BYOK (Bring Your Own Key).
 
-[![Backend CI](https://github.com/omar_zeb/book-forge/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/omar_zeb/book-forge/actions/workflows/backend-ci.yml)
-[![Frontend CI](https://github.com/omar_zeb/book-forge/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/omar_zeb/book-forge/actions/workflows/frontend-ci.yml)
+[![Backend CI](https://github.com/YOUR_USERNAME/book-forge/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/book-forge/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/YOUR_USERNAME/book-forge/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/book-forge/actions/workflows/frontend-ci.yml)
 
 <!-- TODO: Add demo GIF here -->
 
