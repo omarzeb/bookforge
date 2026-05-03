@@ -18,6 +18,7 @@ redis[hiredis]==5.1.1
 # ── Auth / encryption ─────────────────────────────────────────────────────────
 cryptography==43.0.3
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-jose[cryptography]==3.3.0
 
 # ── HTTP clients ──────────────────────────────────────────────────────────────
@@ -44,4 +45,3 @@ pytest-asyncio==0.24.0
 pytest-cov==5.0.0
 ruff==0.7.1
 mypy==1.13.0
-bcrypt==4.0.1
