@@ -24,16 +24,7 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-# ── Placeholder auth dependency ───────────────────────────────────────────────
-# Phase 5 replaces this with a real JWT dependency.
-# For now it returns a stub user so the endpoint is testable.
-async def get_current_user(db: AsyncSession = Depends(get_db)) -> User:
-    from sqlalchemy import select
-    result = await db.execute(select(User).limit(1))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
+from app.core.auth import get_current_user
 
 
 class SaveKeyRequest(BaseModel):
