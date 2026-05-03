@@ -1,0 +1,45 @@
+# This file is automatically merged with docker-compose.yml by Docker Compose.
+# It adds dev-only behaviour: hot reload, source mounts, exposed debug ports.
+# Do NOT use in production.
+
+services:
+
+  api:
+    build:
+      target: development          # multi-stage: stops before the prod slim stage
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8080
+      --reload
+      --reload-dir /app/app
+    volumes:
+      # Mount source so changes reflect immediately without rebuilding
+      # Forward slashes required — Docker Desktop on Windows handles translation
+      - ../../backend/app:/app/app
+      - ../../backend/tests:/app/tests
+      - ../../backend/alembic:/app/alembic
+    environment:
+      DEBUG: "true"
+      APP_ENV: development
+
+  worker:
+    build:
+      target: development
+    command: >
+      python -m app.workers.runner
+      --reload
+    volumes:
+      - ../../backend/app:/app/app
+    environment:
+      DEBUG: "true"
+      APP_ENV: development
+
+  # Lightweight DB admin — visit http://localhost:8888
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    depends_on:
+      - postgres
