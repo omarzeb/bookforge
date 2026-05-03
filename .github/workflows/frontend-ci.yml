@@ -9,7 +9,6 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    if: hashFiles('frontend/package.json') != ''
     defaults:
       run:
         working-directory: frontend
@@ -17,7 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if frontend is initialised
+        id: check
+        run: |
+          if [ -f "package-lock.json" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "No package-lock.json found — frontend not yet initialised. Skipping."
+          fi
+
       - name: Set up Node
+        if: steps.check.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -25,13 +35,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
+        if: steps.check.outputs.ready == 'true'
         run: npm ci
 
       - name: Lint
+        if: steps.check.outputs.ready == 'true'
         run: npm run lint
 
       - name: Type check
+        if: steps.check.outputs.ready == 'true'
         run: npm run typecheck
 
       - name: Build
+        if: steps.check.outputs.ready == 'true'
         run: npm run build
