@@ -1,0 +1,35 @@
+# Same three-stage pattern as Dockerfile.
+# Different entrypoint: runs one job then exits (Fargate one-shot pattern).
+
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── development ───────────────────────────────────────────────────────────────
+FROM base AS development
+
+RUN pip install --no-cache-dir watchfiles
+
+COPY . .
+
+CMD ["python", "-m", "app.workers.runner"]
+
+# ── production ────────────────────────────────────────────────────────────────
+FROM base AS production
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+COPY --chown=appuser:appgroup . .
+
+USER appuser
+
+# Phase 7: Fargate passes --job-id <id> when launching this as a one-shot task
+ENTRYPOINT ["python", "-m", "app.workers.runner"]
