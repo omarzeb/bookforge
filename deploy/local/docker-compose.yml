@@ -70,6 +70,18 @@ services:
       redis:
         condition: service_healthy
 
+  # RQ Dashboard — internal only, not exposed to the internet
+  # Visit http://localhost:9181 to monitor queues and jobs
+  rq-dashboard:
+    image: eoranged/rq-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "9181:9181"
+    environment:
+      RQ_DASHBOARD_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+
 volumes:
   postgres_data:
   redis_data:

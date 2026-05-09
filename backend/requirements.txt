@@ -5,11 +5,12 @@ uvicorn[standard]==0.30.6
 # ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
+psycopg2-binary==2.9.10      # sync driver for RQ worker tasks
 alembic==1.13.3
 aiosqlite==0.20.0
 
 # ── Config ────────────────────────────────────────────────────────────────────
-pydantic==2.9.2
+pydantic[email]==2.9.2
 pydantic-settings==2.6.0
 
 # ── Redis ─────────────────────────────────────────────────────────────────────
