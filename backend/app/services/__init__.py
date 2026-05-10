@@ -4,6 +4,7 @@ from app.services import (
     compiler_service,
     ingest_service,
     job_service,
+    model_tiers,
     orchestrator,
     outline_service,
     task_launcher,

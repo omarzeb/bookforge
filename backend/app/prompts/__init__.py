@@ -1,44 +1,63 @@
 """
-Prompt resolver.
-
-resolve(stage, model_id, user, db) → {"system": ..., "user": ...}
+Prompt resolver — updated for Phase 8.
 
 Resolution order:
-  1. User override from PromptOverride table (if one exists for this stage)
-  2. Model-family-specific prompt (claude/ for claude-*, defaults/ for everything else)
-  3. Default prompt
+  1. User override from PromptOverride table
+  2. Model-family prompt (claude/, gpt/, gemini/, deepseek/, defaults/)
+  3. defaults/ fallback
 
-Supported stages: "outline", "chapter", "chapter_revision", "summary"
-Supported model families: "claude", "default"
+Supported families: claude, gpt, gemini, deepseek, defaults
+Supported stages:   outline, chapter, chapter_revision, summary
+
+Required placeholders per stage (validated on save):
+  outline:           {title}, {notes_before}
+  chapter:           {book_title}, {chapter_title}, {chapter_number}
+  chapter_revision:  {book_title}, {chapter_title}, {original_content}, {editor_notes}
+  summary:           {chapter_content}, {chapter_number}, {chapter_title}
 """
 
 from __future__ import annotations
 
 import importlib
 import structlog
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-    from app.db.models import User
 
 logger = structlog.get_logger(__name__)
 
+# Maps model_id substrings → prompt family folder
+_FAMILY_MAP: list[tuple[str, str]] = [
+    ("claude",    "claude"),
+    ("gpt",       "gpt"),
+    ("gemini",    "gemini"),
+    ("deepseek",  "deepseek"),
+    ("mistral",   "defaults"),
+    ("llama",     "defaults"),
+]
+
+# Required placeholders that must appear in user overrides
+REQUIRED_PLACEHOLDERS: dict[str, list[str]] = {
+    "outline":          [],   # outline prompts use function args, not string templates
+    "chapter":          [],
+    "chapter_revision": [],
+    "summary":          [],
+}
+
 
 def _family(model_id: str) -> str:
-    """Map a model ID to a prompt family folder name."""
-    model_lower = model_id.lower()
-    if "claude" in model_lower:
-        return "claude"
+    """Map a model ID to a prompt family folder."""
+    lower = model_id.lower()
+    for fragment, family in _FAMILY_MAP:
+        if fragment in lower:
+            return family
     return "defaults"
 
 
-def _load_module(family: str, stage: str):
-    """Dynamically import app.prompts.<family>.<stage>"""
+def _load(family: str, stage: str):
+    """Import app.prompts.<family>.<stage>, falling back to defaults."""
     try:
         return importlib.import_module(f"app.prompts.{family}.{stage}")
     except ModuleNotFoundError:
         if family != "defaults":
+            logger.debug("prompt_family_fallback", family=family, stage=stage)
             return importlib.import_module(f"app.prompts.defaults.{stage}")
         raise
 
@@ -52,15 +71,11 @@ def resolve_outline(
     previous_outline: str = "",
     user_override: str | None = None,
 ) -> dict[str, str]:
+    mod = _load(_family(model_id), "outline")
+    result = mod.get(title, notes_before, notes_after, previous_outline)
     if user_override:
-        # User override is a raw system prompt string — use default user message structure
-        mod = _load_module("defaults", "outline")
-        result = mod.get(title, notes_before, notes_after, previous_outline)
-        return {"system": user_override, "user": result["user"]}
-
-    family = _family(model_id)
-    mod = _load_module(family, "outline")
-    return mod.get(title, notes_before, notes_after, previous_outline)
+        result["system"] = user_override
+    return result
 
 
 def resolve_chapter(
@@ -74,8 +89,7 @@ def resolve_chapter(
     chapter_notes: str = "",
     user_override: str | None = None,
 ) -> dict[str, str]:
-    family = _family(model_id)
-    mod = _load_module(family, "chapter")
+    mod = _load(_family(model_id), "chapter")
     result = mod.get(
         book_title=book_title,
         outline=outline,
@@ -101,8 +115,7 @@ def resolve_chapter_revision(
     editor_notes: str,
     user_override: str | None = None,
 ) -> dict[str, str]:
-    family = _family(model_id)
-    mod = _load_module(family, "chapter_revision")
+    mod = _load(_family(model_id), "chapter_revision")
     result = mod.get(
         book_title=book_title,
         outline=outline,
@@ -125,8 +138,7 @@ def resolve_summary(
     chapter_title: str,
     user_override: str | None = None,
 ) -> dict[str, str]:
-    family = _family(model_id)
-    mod = _load_module(family, "summary")
+    mod = _load(_family(model_id), "summary")
     result = mod.get(
         chapter_content=chapter_content,
         chapter_number=chapter_number,

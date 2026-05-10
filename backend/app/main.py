@@ -55,6 +55,8 @@ def create_app() -> FastAPI:
     from app.api.v1.ingest import router as ingest_router
     from app.api.v1.jobs import router as jobs_router
     from app.api.v1.reconciliation import router as reconciliation_router
+    from app.api.v1.prompts import router as prompts_router
+    from app.api.v1.cost import router as cost_router
 
     application.include_router(health_router)
     application.include_router(auth_router,     prefix="/api/v1")
@@ -65,6 +67,8 @@ def create_app() -> FastAPI:
     application.include_router(ingest_router,   prefix="/api/v1")
     application.include_router(jobs_router,          prefix="/api/v1")
     application.include_router(reconciliation_router, prefix="/api/v1")
+    application.include_router(prompts_router,        prefix="/api/v1")
+    application.include_router(cost_router,           prefix="/api/v1")
 
     return application
 
