@@ -1,14 +1,28 @@
 """
-Job service — create and enqueue jobs.
+Job service — create job records and dispatch to the appropriate launcher.
+
+Phase 7: launch_task() replaces direct RQ enqueueing.
+The launcher decides whether to use Fargate (prod) or RQ (local dev).
 """
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Book, Job, JobStatus
-from app.workers.queue import QUEUE_CHAPTERS, QUEUE_COMPILE, QUEUE_OUTLINES, get_queue
 
 logger = structlog.get_logger(__name__)
+
+
+async def _create_job(db: AsyncSession, book: Book, task_name: str) -> Job:
+    job = Job(
+        book_id=book.id,
+        task_name=task_name,
+        status=JobStatus.QUEUED,
+    )
+    db.add(job)
+    await db.flush()  # get the generated id
+    return job
 
 
 async def enqueue_outline(
@@ -16,25 +30,10 @@ async def enqueue_outline(
     book: Book,
     notes_before: str = "",
 ) -> Job:
-    """Create a job record and enqueue outline generation."""
-    job = Job(
-        book_id=book.id,
-        task_name="generate_outline",
-        status=JobStatus.QUEUED,
-    )
-    db.add(job)
-    await db.flush()  # get the id
-
-    queue = get_queue(QUEUE_OUTLINES)
-    queue.enqueue(
-        "app.workers.tasks.generate_outline_task",
-        job_id_arg := job.id,
-        notes_before,
-        job_id=job.id,  # use our job id as RQ job id for easy lookup
-        job_timeout=600,  # 10 min max
-    )
-
-    logger.info("outline_enqueued", job_id=job.id, book_id=book.id)
+    from app.services.task_launcher import launch_task
+    job = await _create_job(db, book, "generate_outline")
+    await launch_task(db, job, extra_env={"NOTES_BEFORE": notes_before})
+    logger.info("outline_dispatched", job_id=job.id, book_id=book.id)
     return job
 
 
@@ -43,25 +42,10 @@ async def enqueue_chapter(
     book: Book,
     chapter_number: int,
 ) -> Job:
-    """Create a job record and enqueue chapter generation."""
-    job = Job(
-        book_id=book.id,
-        task_name="generate_chapter",
-        status=JobStatus.QUEUED,
-    )
-    db.add(job)
-    await db.flush()
-
-    queue = get_queue(QUEUE_CHAPTERS)
-    queue.enqueue(
-        "app.workers.tasks.generate_chapter_task",
-        job.id,
-        chapter_number,
-        job_id=job.id,
-        job_timeout=900,  # 15 min max per chapter
-    )
-
-    logger.info("chapter_enqueued", job_id=job.id, book_id=book.id, chapter=chapter_number)
+    from app.services.task_launcher import launch_task
+    job = await _create_job(db, book, "generate_chapter")
+    await launch_task(db, job, extra_env={"CHAPTER_NUMBER": str(chapter_number)})
+    logger.info("chapter_dispatched", job_id=job.id, book_id=book.id, chapter=chapter_number)
     return job
 
 
@@ -70,29 +54,13 @@ async def enqueue_compile(
     book: Book,
     output_format: str = "docx",
 ) -> Job:
-    """Create a job record and enqueue compilation."""
-    job = Job(
-        book_id=book.id,
-        task_name="compile_book",
-        status=JobStatus.QUEUED,
-    )
-    db.add(job)
-    await db.flush()
-
-    queue = get_queue(QUEUE_COMPILE)
-    queue.enqueue(
-        "app.workers.tasks.compile_book_task",
-        job.id,
-        output_format,
-        job_id=job.id,
-        job_timeout=300,
-    )
-
-    logger.info("compile_enqueued", job_id=job.id, book_id=book.id)
+    from app.services.task_launcher import launch_task
+    job = await _create_job(db, book, "compile_book")
+    await launch_task(db, job, extra_env={"OUTPUT_FORMAT": output_format})
+    logger.info("compile_dispatched", job_id=job.id, book_id=book.id)
     return job
 
 
 async def get_job(db: AsyncSession, job_id: str) -> Job | None:
-    from sqlalchemy import select
     result = await db.execute(select(Job).where(Job.id == job_id))
     return result.scalar_one_or_none()

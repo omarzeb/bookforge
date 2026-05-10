@@ -1,15 +1,14 @@
 """
-RQ task functions.
+Worker task functions — one-shot Fargate pattern.
 
-Each task:
-1. Opens a synchronous DB session (RQ workers are sync)
-2. Fetches the job record and marks it RUNNING
-3. Runs the appropriate service
-4. Marks the job DONE or FAILED
-5. Writes any output/errors to the job record
+Each task function:
+1. Marks the job RUNNING
+2. Runs the service (async, via asyncio.run)
+3. Writes streamed output to job.streamed_output
+4. Marks DONE or FAILED
 
-Streaming: the provider's stream() output is appended to job.streamed_output
-so the SSE endpoint can poll and push incremental updates to the frontend.
+In production these run inside a Fargate container launched with --job-id.
+In local dev they run inside the RQ worker process.
 """
 
 import asyncio
@@ -17,220 +16,181 @@ import traceback
 from datetime import datetime
 
 import structlog
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
-
-from app.config import settings
-from app.db.models import Book, BookStatus, Job, JobStatus, OutputFormat, User
-from app.providers.factory import get_provider_for_user
-from app.services import outline_service, chapter_service, compiler_service
 
 logger = structlog.get_logger(__name__)
 
 
-def _get_sync_engine():
-    """
-    Create a synchronous SQLAlchemy engine for use in RQ worker tasks.
-    RQ workers run in a sync context so we can't use asyncpg directly.
-    We swap the driver to psycopg2 for sync workers.
-    """
-    sync_url = settings.database_url.replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
-    ).replace(
-        "sqlite+aiosqlite://", "sqlite://"
-    )
-    return create_engine(sync_url)
+def _run(coro):
+    """Run async coroutine from sync RQ worker context."""
+    return asyncio.run(coro)
 
 
-def _append_stream(session: Session, job: Job, text: str) -> None:
-    """Append text to the job's streamed_output buffer."""
-    job.streamed_output = (job.streamed_output or "") + text
-    session.add(job)
-    session.commit()
+def _get_async_session():
+    """Return a fresh async session factory."""
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from app.config import settings
+    engine = create_async_engine(settings.database_url)
+    return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-
-def _mark_running(session: Session, job: Job) -> None:
-    job.status = JobStatus.RUNNING
-    job.started_at = datetime.utcnow()
-    session.add(job)
-    session.commit()
-
-
-def _mark_done(session: Session, job: Job) -> None:
-    job.status = JobStatus.DONE
-    job.completed_at = datetime.utcnow()
-    session.add(job)
-    session.commit()
-
-
-def _mark_failed(session: Session, job: Job, error: str) -> None:
-    job.status = JobStatus.FAILED
-    job.completed_at = datetime.utcnow()
-    job.error_message = error
-    session.add(job)
-    session.commit()
-
-
-def _run_async(coro):
-    """Run an async coroutine from a sync context."""
-    return asyncio.get_event_loop().run_until_complete(coro)
-
-
-# ── Task functions ────────────────────────────────────────────────────────────
 
 def generate_outline_task(job_id: str, notes_before: str = "") -> None:
-    """
-    RQ task: generate outline for a book.
-    Called by the worker process.
-    """
-    engine = _get_sync_engine()
-    SessionLocal = sessionmaker(bind=engine)
+    """One-shot task: generate outline for a book."""
 
-    with SessionLocal() as session:
-        job = session.get(Job, job_id)
-        if not job:
-            logger.error("job_not_found", job_id=job_id)
-            return
+    async def _run_async():
+        factory = _get_async_session()
+        async with factory() as db:
+            from app.db.models import Book, BookStatus, Job, JobStatus, User
+            from app.providers.factory import get_provider_for_user
+            from app.services import outline_service
 
-        book = session.get(Book, job.book_id)
-        user = session.get(User, book.user_id)
+            job = await db.get(Job, job_id)
+            if not job:
+                logger.error("job_not_found", job_id=job_id)
+                return
 
-        _mark_running(session, job)
-        logger.info("outline_task_started", job_id=job_id, book_id=book.id)
+            book = await db.get(Book, job.book_id)
+            user = await db.get(User, book.user_id)
 
-        try:
-            provider = get_provider_for_user(user)
+            # Mark running
+            job.status = JobStatus.RUNNING
+            job.started_at = datetime.utcnow()
+            db.add(job)
+            await db.commit()
 
-            # Use async outline service via asyncio
-            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+            logger.info("outline_task_started", job_id=job_id, book_id=book.id)
 
-            async_engine = create_async_engine(settings.database_url)
-            async_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+            try:
+                provider = get_provider_for_user(user)
+                outline = await outline_service.generate_outline(
+                    db=db,
+                    book=book,
+                    provider=provider,
+                    notes_before=notes_before or book.outline_raw or "",
+                )
+                await db.commit()
 
-            async def _run():
-                async with async_factory() as async_session:
-                    async_book = await async_session.get(Book, job.book_id)
-                    result = await outline_service.generate_outline(
-                        db=async_session,
-                        book=async_book,
-                        provider=provider,
-                        notes_before=notes_before or async_book.outline_raw or "",
-                    )
-                    await async_session.commit()
-                    return result
+                job.status = JobStatus.DONE
+                job.completed_at = datetime.utcnow()
+                job.streamed_output = outline
+                db.add(job)
+                await db.commit()
 
-            outline_text = asyncio.run(_run())
-            _append_stream(session, job, outline_text)
-            _mark_done(session, job)
+                logger.info("outline_task_done", job_id=job_id)
 
-            # Update book status in sync session
-            book.status = BookStatus.OUTLINE_REVIEW
-            session.add(book)
-            session.commit()
+            except Exception as exc:
+                error = traceback.format_exc()
+                logger.error("outline_task_failed", job_id=job_id, error=str(exc))
 
-            logger.info("outline_task_done", job_id=job_id)
+                job.status = JobStatus.FAILED
+                job.completed_at = datetime.utcnow()
+                job.error_message = error
+                db.add(job)
 
-        except Exception as exc:
-            error = traceback.format_exc()
-            logger.error("outline_task_failed", job_id=job_id, error=str(exc))
-            _mark_failed(session, job, error)
+                book.status = BookStatus.FAILED
+                db.add(book)
+                await db.commit()
 
-            book.status = BookStatus.FAILED
-            session.add(book)
-            session.commit()
+    _run(_run_async())
 
 
-def generate_chapter_task(job_id: str, chapter_number: int) -> None:
-    """RQ task: generate a single chapter."""
-    engine = _get_sync_engine()
-    SessionLocal = sessionmaker(bind=engine)
+def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
+    """One-shot task: generate a single chapter."""
 
-    with SessionLocal() as session:
-        job = session.get(Job, job_id)
-        if not job:
-            return
+    async def _run_async():
+        factory = _get_async_session()
+        async with factory() as db:
+            from app.db.models import Book, Job, JobStatus, User
+            from app.providers.factory import get_provider_for_user
+            from app.services import chapter_service
 
-        book = session.get(Book, job.book_id)
-        user = session.get(User, book.user_id)
+            job = await db.get(Job, job_id)
+            if not job:
+                return
 
-        _mark_running(session, job)
-        logger.info("chapter_task_started", job_id=job_id, chapter=chapter_number)
+            book = await db.get(Book, job.book_id)
+            user = await db.get(User, book.user_id)
 
-        try:
-            provider = get_provider_for_user(user)
+            job.status = JobStatus.RUNNING
+            job.started_at = datetime.utcnow()
+            db.add(job)
+            await db.commit()
 
-            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-            async_engine = create_async_engine(settings.database_url)
-            async_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+            logger.info("chapter_task_started", job_id=job_id, chapter=chapter_number)
 
-            async def _run():
-                async with async_factory() as async_session:
-                    async_book = await async_session.get(Book, job.book_id)
-                    chapter = await chapter_service.get_chapter(
-                        async_session, job.book_id, chapter_number
-                    )
-                    await chapter_service.generate_chapter(
-                        db=async_session,
-                        book=async_book,
-                        chapter=chapter,
-                        provider=provider,
-                    )
-                    await async_session.commit()
-                    return chapter.content or ""
+            try:
+                provider = get_provider_for_user(user)
+                chapter = await chapter_service.get_chapter(db, book.id, chapter_number)
+                await chapter_service.generate_chapter(
+                    db=db, book=book, chapter=chapter, provider=provider
+                )
+                await db.commit()
 
-            content = asyncio.run(_run())
-            _append_stream(session, job, content)
-            _mark_done(session, job)
-            logger.info("chapter_task_done", job_id=job_id, chapter=chapter_number)
+                job.status = JobStatus.DONE
+                job.completed_at = datetime.utcnow()
+                job.streamed_output = chapter.content or ""
+                db.add(job)
+                await db.commit()
 
-        except Exception as exc:
-            error = traceback.format_exc()
-            logger.error("chapter_task_failed", job_id=job_id, error=str(exc))
-            _mark_failed(session, job, error)
+                logger.info("chapter_task_done", job_id=job_id, chapter=chapter_number)
+
+            except Exception as exc:
+                error = traceback.format_exc()
+                logger.error("chapter_task_failed", job_id=job_id, error=str(exc))
+
+                job.status = JobStatus.FAILED
+                job.completed_at = datetime.utcnow()
+                job.error_message = error
+                db.add(job)
+                await db.commit()
+
+    _run(_run_async())
 
 
 def compile_book_task(job_id: str, output_format: str = "docx") -> None:
-    """RQ task: compile book to docx/txt."""
-    engine = _get_sync_engine()
-    SessionLocal = sessionmaker(bind=engine)
+    """One-shot task: compile book to docx/txt."""
 
-    with SessionLocal() as session:
-        job = session.get(Job, job_id)
-        if not job:
-            return
+    async def _run_async():
+        factory = _get_async_session()
+        async with factory() as db:
+            from app.db.models import Book, BookStatus, Job, JobStatus, OutputFormat
+            from app.services import compiler_service
 
-        book = session.get(Book, job.book_id)
-        _mark_running(session, job)
+            job = await db.get(Job, job_id)
+            if not job:
+                return
 
-        try:
-            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-            async_engine = create_async_engine(settings.database_url)
-            async_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+            book = await db.get(Book, job.book_id)
 
-            fmt = OutputFormat.DOCX if output_format == "docx" else OutputFormat.TXT
+            job.status = JobStatus.RUNNING
+            job.started_at = datetime.utcnow()
+            db.add(job)
+            await db.commit()
 
-            async def _run():
-                async with async_factory() as async_session:
-                    async_book = await async_session.get(Book, job.book_id)
-                    path = await compiler_service.compile_book(
-                        db=async_session,
-                        book=async_book,
-                        output_format=fmt,
-                    )
-                    await async_session.commit()
-                    return path
+            logger.info("compile_task_started", job_id=job_id)
 
-            path = asyncio.run(_run())
-            _append_stream(session, job, f"Compiled to: {path}")
-            _mark_done(session, job)
+            try:
+                fmt = OutputFormat.DOCX if output_format == "docx" else OutputFormat.TXT
+                path = await compiler_service.compile_book(
+                    db=db, book=book, output_format=fmt
+                )
+                await db.commit()
 
-            book.status = BookStatus.COMPLETE
-            session.add(book)
-            session.commit()
+                job.status = JobStatus.DONE
+                job.completed_at = datetime.utcnow()
+                job.streamed_output = f"Compiled: {path}"
+                db.add(job)
+                await db.commit()
 
-            logger.info("compile_task_done", job_id=job_id, path=path)
+                logger.info("compile_task_done", job_id=job_id, path=path)
 
-        except Exception as exc:
-            error = traceback.format_exc()
-            logger.error("compile_task_failed", job_id=job_id, error=str(exc))
-            _mark_failed(session, job, error)
+            except Exception as exc:
+                error = traceback.format_exc()
+                logger.error("compile_task_failed", job_id=job_id, error=str(exc))
+
+                job.status = JobStatus.FAILED
+                job.completed_at = datetime.utcnow()
+                job.error_message = error
+                db.add(job)
+                await db.commit()
+
+    _run(_run_async())
