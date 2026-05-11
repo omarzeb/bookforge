@@ -1,8 +1,8 @@
 """
-Health and readiness endpoints.
+Health and readiness endpoints — updated for Phase 10.
 
-/health  — lightweight liveness check (no dependencies). Used by load balancers.
-/ready   — full readiness check (DB + Redis). Used by App Runner as the health check.
+/health  — liveness (no deps)
+/ready   — DB + Redis + OpenRouter reachability
 """
 
 import structlog
@@ -21,7 +21,6 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health() -> dict:
-    """Liveness — always returns 200 if the process is running."""
     return {"status": "ok"}
 
 
@@ -30,15 +29,10 @@ async def ready(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> JSONResponse:
-    """
-    Readiness — checks DB and Redis connectivity.
-    Returns 200 if both are reachable, 503 otherwise.
-    App Runner uses this as its health check target.
-    """
     checks: dict[str, str] = {}
     healthy = True
 
-    # DB check
+    # DB
     try:
         await db.execute(text("SELECT 1"))
         checks["db"] = "ok"
@@ -47,7 +41,7 @@ async def ready(
         checks["db"] = "unavailable"
         healthy = False
 
-    # Redis check
+    # Redis
     try:
         await redis.ping()
         checks["redis"] = "ok"
@@ -55,6 +49,21 @@ async def ready(
         logger.error("readiness_redis_failed", error=str(exc))
         checks["redis"] = "unavailable"
         healthy = False
+
+    # OpenRouter (lightweight — just a DNS/TCP check, no token burn)
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                timeout=5.0,
+                headers={"Authorization": "Bearer test"},  # will 401 but proves reachability
+            )
+            checks["openrouter"] = "ok" if resp.status_code in (200, 401) else "degraded"
+    except Exception as exc:
+        logger.warning("readiness_openrouter_failed", error=str(exc))
+        checks["openrouter"] = "unreachable"
+        # Don't fail health for OpenRouter — it's external
 
     status_code = 200 if healthy else 503
     return JSONResponse(

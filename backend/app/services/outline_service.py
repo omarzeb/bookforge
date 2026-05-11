@@ -74,6 +74,10 @@ async def generate_outline(
         system=prompt["system"],
         user=prompt["user"],
         max_tokens=2048,
+        user_id=book.user_id,
+        book_id=book.id,
+        stage="outline",
+        db=db,
     )
 
     outline_text = clean_text(result.content)

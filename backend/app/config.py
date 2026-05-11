@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     openrouter_demo_key: str = ""    # optional, only needed for DEMO_MODE
     demo_mode: bool = False
 
+    # ── Sentry ───────────────────────────────────────────────────────────────────
+    sentry_dsn: str = ""   # leave empty to disable
+
     # ── ECS / Fargate (production only) ──────────────────────────────────────────
     ecs_cluster: str = ""
     ecs_task_definition: str = ""

@@ -7,13 +7,13 @@ import { isAuthenticated } from '@/lib/auth'
 const STEPS = [
   { n: '1', title: 'Tell us about your book', desc: 'Give your book a title and describe what it should cover. A sentence or two is enough to get started.', bg: 'from-amber-950/30 to-slate-950' },
   { n: '2', title: 'Review the outline', desc: "We'll suggest a chapter structure. Read it, request changes, or approve it when you're happy.", bg: 'from-blue-950/30 to-slate-950' },
-  { n: '3', title: "Read each chapter as it's written", desc: 'Chapters are written one by one. You can revise any chapter before moving forward.', bg: 'from-purple-950/30 to-slate-950' },
+  { n: '3', title: "Read each chapter as it's written", desc: 'Chapters are written one by one. You can revise any chapter before moving on.', bg: 'from-purple-950/30 to-slate-950' },
   { n: '4', title: 'Download your finished book', desc: "When you've approved everything, download your complete book as a Word document.", bg: 'from-green-950/30 to-slate-950' },
 ]
 
 const FEATURES = [
   { icon: '✍️', title: 'Your idea, fully written', desc: "Describe what you want to write. BookForge creates a structured outline, then writes each chapter — one at a time, at your pace." },
-  { icon: '👁️', title: 'You stay in control', desc: "Read every chapter before it becomes part of your book. Ask for changes, give notes, or approve it." },
+  { icon: '👁️', title: 'You stay in control', desc: "Read every chapter before it becomes part of your book. Ask for changes, give notes, or approve it and move on." },
   { icon: '🔐', title: 'Your content is private', desc: "Your writing never trains anyone's AI. Your account details are encrypted and never shared." },
   { icon: '📥', title: 'Ready to publish or print', desc: 'Download your finished book as a Word document or plain text — ready for editing, publishing, or sharing.' },
 ]
@@ -79,8 +79,8 @@ export default function LandingPage() {
 
           <h1 className="font-display font-light leading-none tracking-tight mb-6"
             style={{ fontSize: 'clamp(3rem, 8vw, 5.5rem)', color: '#f0ebe3' }}>
-            From an idea to a finished book<br />
-            <span style={{ color: '#f59e0b' }}>Chapter by Chapter.</span>
+            From idea to finished book,<br />
+            <span style={{ color: '#f59e0b' }}>chapter by chapter.</span>
           </h1>
 
           <p className="text-lg max-w-lg mx-auto leading-relaxed mb-10" style={{ color: '#8a9ab5' }}>
@@ -103,7 +103,7 @@ export default function LandingPage() {
         {/* Scroll indicator */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
           style={{ color: '#4a5a72' }}>
-          {/* <span className="text-xs uppercase tracking-widest">Scroll to explore</span> */}
+          <span className="text-xs uppercase tracking-widest">Scroll to explore</span>
           <div className="w-5 h-8 rounded-full border flex items-start justify-center pt-1.5"
             style={{ borderColor: '#4a5a72' }}>
             <div className="w-1 h-2 rounded-full animate-bounce" style={{ background: '#f59e0b' }} />

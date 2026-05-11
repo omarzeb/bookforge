@@ -54,6 +54,7 @@ export default function ModelsPage() {
     setPinnedState(getPinned())
     Promise.all([modelsApi.curated(), modelsApi.all()])
       .then(([c, a]) => { setCurated(c); setAllModels(a) })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 

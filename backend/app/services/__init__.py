@@ -8,4 +8,5 @@ from app.services import (
     orchestrator,
     outline_service,
     task_launcher,
+    usage_service,
 )
