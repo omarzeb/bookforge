@@ -65,8 +65,14 @@ async def create_book(
         title=body.title,
         selected_model=body.selected_model,
     )
-    if body.notes_before:
-        book.outline_raw = body.notes_before
+    # Store notes_before with chapter count hint so outline service picks it up
+    notes = body.notes_before or ""
+    if body.chapter_count and body.chapter_count != 10:
+        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
+    elif body.chapter_count:
+        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
+    if notes:
+        book.outline_raw = notes
         db.add(book)
     await db.commit()
     await db.refresh(book)

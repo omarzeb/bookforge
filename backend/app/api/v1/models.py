@@ -27,7 +27,8 @@ class ModelResponse(BaseModel):
     prompt_price_per_1k: float | None
     completion_price_per_1k: float | None
     tier: str | None
-    model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+    model_config = {"from_attributes": True}
 
 
 @router.get("", response_model=list[ModelResponse])

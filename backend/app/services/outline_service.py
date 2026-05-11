@@ -53,6 +53,11 @@ async def generate_outline(
     model_id = book.selected_model or "defaults"
     override = await _get_user_override(db, book.user_id, "outline")
 
+    # Extract chapter count hint from notes if specified
+    import re
+    chapter_match = re.search(r'\b(\d+)\s+chapters?\b', notes_before, re.IGNORECASE)
+    chapter_count = int(chapter_match.group(1)) if chapter_match else 10
+
     prompt = resolve_outline(
         model_id=model_id,
         title=book.title,
@@ -60,6 +65,7 @@ async def generate_outline(
         notes_after=notes_after,
         previous_outline=previous_outline,
         user_override=override,
+        chapter_count=chapter_count,
     )
 
     logger.info("generating_outline", book_id=book.id, model=model_id)

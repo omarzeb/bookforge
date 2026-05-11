@@ -29,7 +29,6 @@ class CuratedModelResponse(BaseModel):
     notes: str
     prompt_price_per_1k: float | None = None
     completion_price_per_1k: float | None = None
-    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class CostEstimateResponse(BaseModel):
@@ -38,7 +37,6 @@ class CostEstimateResponse(BaseModel):
     low_usd: float | None
     high_usd: float | None
     note: str = ""
-    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 @router.get("/models/curated", response_model=list[CuratedModelResponse])
@@ -107,3 +105,14 @@ async def estimate_cost(
         high_usd=estimate["high"],
         note=note,
     )
+
+
+@router.post("/models/sync")
+async def sync_models_endpoint(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Sync the model list and pricing from OpenRouter."""
+    from app.services.model_sync import sync_models
+    count = await sync_models(db)
+    return {"synced": count, "message": f"Synced {count} models"}

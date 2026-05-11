@@ -13,6 +13,7 @@ class BookCreate(BaseModel):
     title: str
     selected_model: str | None = None
     notes_before: str = ""
+    chapter_count: int = 10
 
 
 class BookResponse(BaseModel):

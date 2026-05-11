@@ -153,11 +153,22 @@ def _launch_rq(job: Job, extra_env: dict[str, str]) -> None:
     )
 
     queue = get_queue(queue_name)
+
+    # Build kwargs from extra_env so chapter_number, notes_before etc. are passed
+    kwargs: dict = {}
+    if "NOTES_BEFORE" in extra_env:
+        kwargs["notes_before"] = extra_env["NOTES_BEFORE"]
+    if "CHAPTER_NUMBER" in extra_env:
+        kwargs["chapter_number"] = int(extra_env["CHAPTER_NUMBER"])
+    if "OUTPUT_FORMAT" in extra_env:
+        kwargs["output_format"] = extra_env["OUTPUT_FORMAT"]
+
     queue.enqueue(
         task_fn,
         job.id,
         job_id=job.id,
         job_timeout=timeout,
+        **kwargs,
     )
 
     logger.info("rq_task_enqueued", job_id=job.id, task=job.task_name, queue=queue_name)

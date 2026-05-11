@@ -70,9 +70,15 @@ def resolve_outline(
     notes_after: str = "",
     previous_outline: str = "",
     user_override: str | None = None,
+    chapter_count: int = 10,
 ) -> dict[str, str]:
     mod = _load(_family(model_id), "outline")
-    result = mod.get(title, notes_before, notes_after, previous_outline)
+    import inspect
+    sig = inspect.signature(mod.get)
+    if "chapter_count" in sig.parameters:
+        result = mod.get(title, notes_before, notes_after, previous_outline, chapter_count)
+    else:
+        result = mod.get(title, notes_before, notes_after, previous_outline)
     if user_override:
         result["system"] = user_override
     return result
