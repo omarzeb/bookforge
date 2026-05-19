@@ -1,0 +1,25 @@
+# deploy/aws/terraform/terraform.tfvars.example
+# Copy to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars to git — it's in .gitignore
+
+aws_region   = "us-east-1"
+environment  = "production"
+alert_email  = "you@example.com"
+
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+fernet_key   = "your-fernet-key-here"
+
+# Generate with: openssl rand -hex 32
+jwt_secret   = "your-jwt-secret-here"
+app_secret_key = "your-app-secret-key-here"
+
+# Neon.tech free tier PostgreSQL (asyncpg connection string)
+database_url = "postgresql+asyncpg://user:pass@ep-xxx.us-east-1.aws.neon.tech/bookforge?sslmode=require"
+
+# Upstash Redis (free tier)
+redis_url    = "rediss://default:xxx@us1-xxx.upstash.io:6379"
+
+# Optional
+custom_domain       = ""   # e.g. "bookforge.yourdomain.com"
+app_internal_secret = ""   # openssl rand -hex 16
+budget_monthly_limit = 25

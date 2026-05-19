@@ -46,6 +46,10 @@ class FakeLLMProvider(LLMProvider):
         user: str,
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        stage: str = "unknown",
+        db=None,
     ) -> GenerateResult:
         self.calls.append({"model": model, "system": system, "user": user})
         return GenerateResult(

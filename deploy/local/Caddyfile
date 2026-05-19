@@ -1,0 +1,65 @@
+# deploy/local/Caddyfile
+#
+# Caddy handles:
+#   - Automatic HTTPS (Let's Encrypt) for your domain
+#   - Reverse proxy: /api/* → FastAPI, everything else → Next.js
+#   - HTTP/2 and HTTP/3 out of the box
+#
+# Replace bookforge.yourdomain.com with your actual domain.
+# For local dev without a domain, replace with :80 and remove tls settings.
+
+bookforge.yourdomain.com {
+    # /api/* and /docs → FastAPI backend
+    handle /api/* {
+        reverse_proxy api:8080
+    }
+
+    handle /docs {
+        reverse_proxy api:8080
+    }
+
+    handle /openapi.json {
+        reverse_proxy api:8080
+    }
+
+    handle /health {
+        reverse_proxy api:8080
+    }
+
+    handle /ready {
+        reverse_proxy api:8080
+    }
+
+    # Everything else → Next.js frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Compress responses
+    encode gzip zstd
+
+    log {
+        output file /data/caddy/access.log {
+            roll_size 10MB
+            roll_keep 3
+        }
+    }
+}
+
+# Local dev fallback (no domain) — uncomment and comment out the block above
+# :80 {
+#     handle /api/* {
+#         reverse_proxy api:8080
+#     }
+#     handle {
+#         reverse_proxy frontend:3000
+#     }
+# }

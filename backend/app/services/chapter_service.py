@@ -159,6 +159,10 @@ async def generate_chapter(
         system=prompt["system"],
         user=prompt["user"],
         max_tokens=8192,
+        user_id=book.user_id,
+        book_id=book.id,
+        stage="chapter_revision" if chapter.revision_notes else "chapter",
+        db=db,
     )
 
     content = clean_chapter(result.content)
@@ -203,6 +207,10 @@ async def _summarize(
         system=prompt["system"],
         user=prompt["user"],
         max_tokens=512,
+        user_id=book.user_id,
+        book_id=book.id,
+        stage="summary",
+        db=db,
     )
     return result.content.strip()
 

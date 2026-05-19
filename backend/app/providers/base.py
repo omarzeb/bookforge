@@ -39,6 +39,11 @@ class LLMProvider(ABC):
         user: str,
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        # Usage logging context — optional, ignored by providers that don't support it
+        user_id: str | None = None,
+        book_id: str | None = None,
+        stage: str = "unknown",
+        db=None,
     ) -> GenerateResult:
         """Single-turn generation — returns full response once complete."""
 

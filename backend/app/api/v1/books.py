@@ -1,14 +1,16 @@
 """
-Book routes — full workflow via HTTP.
+Book routes — updated for Phase 6 async job enqueueing.
+
+advance() now returns a job_id immediately instead of blocking.
 """
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
-from app.core.exception_handlers import ConflictError, NotFoundError, ValidationError
 from app.db.models import Book, BookStatus, OutputFormat, User
 from app.db.session import get_db
 from app.providers.exceptions import InvalidKey
@@ -20,10 +22,17 @@ from app.schemas import (
     FinalReviseRequest,
     OutlineReviseRequest,
 )
-from app.services import book_service, compiler_service, orchestrator, outline_service
+from app.services import book_service, compiler_service, outline_service
+from app.services import job_service
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/books", tags=["books"])
+
+
+class AdvanceResponse(BaseModel):
+    book: BookResponse
+    job_id: str | None = None
+    message: str = ""
 
 
 def _require_book_status(book: Book, *allowed: BookStatus) -> None:
@@ -56,9 +65,14 @@ async def create_book(
         title=body.title,
         selected_model=body.selected_model,
     )
-    # Store notes_before in outline_raw until outline generation picks it up
-    if body.notes_before:
-        book.outline_raw = body.notes_before
+    # Store notes_before with chapter count hint so outline service picks it up
+    notes = body.notes_before or ""
+    if body.chapter_count and body.chapter_count != 10:
+        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
+    elif body.chapter_count:
+        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
+    if notes:
+        book.outline_raw = notes
         db.add(book)
     await db.commit()
     await db.refresh(book)
@@ -84,23 +98,23 @@ async def delete_book(
     await db.commit()
 
 
-# ── Advance (run orchestrator) ─────────────────────────────────────────────────
+# ── Advance — now async via job queue ────────────────────────────────────────
 
-@router.post("/{book_id}/advance", response_model=BookResponse)
+@router.post("/{book_id}/advance", response_model=AdvanceResponse)
 async def advance_book(
     book_id: str,
     body: AdvanceRequest = AdvanceRequest(),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Book:
+) -> AdvanceResponse:
     """
-    Run the orchestrator for this book. Advances through automatic states
-    until it hits a human gate (OUTLINE_REVIEW, CHAPTER_REVIEW) or completes.
+    Enqueue the next generation step for this book.
+    Returns immediately with a job_id — poll GET /jobs/{id} for status,
+    or connect to GET /jobs/{id}/stream for live token output.
     """
     book = await book_service.get_book(db, book_id, user.id)
 
-    # If all chapters are approved and we are in CHAPTER_REVIEW,
-    # transition back to CHAPTERS_GENERATING so the orchestrator can proceed
+    # Auto-transition CHAPTER_REVIEW → CHAPTERS_GENERATING if all approved
     from app.services import chapter_service as cs
     if book.status == BookStatus.CHAPTER_REVIEW:
         if await cs.all_approved(db, book.id):
@@ -109,19 +123,70 @@ async def advance_book(
             await db.commit()
             await db.refresh(book)
 
-    try:
-        provider = get_provider_for_user(user)
-    except InvalidKey as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    job_id: str | None = None
+    message = ""
 
-    await orchestrator.run(
-        db=db,
-        book=book,
-        provider=provider,
-        notes_before=body.notes_before or book.outline_raw or "",
-    )
+    if book.status == BookStatus.INPUT_RECEIVED:
+        try:
+            get_provider_for_user(user)  # validate key exists before enqueueing
+        except InvalidKey as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+        job = await job_service.enqueue_outline(
+            db=db,
+            book=book,
+            notes_before=body.notes_before or book.outline_raw or "",
+        )
+        job_id = job.id
+        message = "Outline generation queued"
+
+    elif book.status == BookStatus.CHAPTERS_GENERATING:
+        from app.services import chapter_service as cs
+        await cs.initialize_chapters(db, book)
+        next_ch = await cs.get_next_pending(db, book.id)
+
+        if next_ch is None:
+            # Check for chapters needing revision
+            chapters = await cs.get_chapters(db, book.id)
+            needs_revision = [c for c in chapters if c.revision_notes and not c.approved]
+
+            if needs_revision:
+                ch = needs_revision[0]
+                job = await job_service.enqueue_chapter(db=db, book=book, chapter_number=ch.number)
+                job_id = job.id
+                message = f"Chapter {ch.number} revision queued"
+            elif await cs.all_approved(db, book.id):
+                # All done — compile
+                job = await job_service.enqueue_compile(db=db, book=book)
+                job_id = job.id
+                message = "Compilation queued"
+            else:
+                book.status = BookStatus.CHAPTER_REVIEW
+                db.add(book)
+                message = "All chapters generated — awaiting review"
+        else:
+            job = await job_service.enqueue_chapter(
+                db=db, book=book, chapter_number=next_ch.number
+            )
+            job_id = job.id
+            message = f"Chapter {next_ch.number} generation queued"
+
+    elif book.status == BookStatus.FINAL_REVIEW:
+        job = await job_service.enqueue_compile(db=db, book=book)
+        job_id = job.id
+        message = "Compilation queued"
+
+    else:
+        message = f"Book is in state '{book.status}' — no action needed"
+
+    await db.commit()
     await db.refresh(book)
-    return book
+
+    return AdvanceResponse(
+        book=BookResponse.model_validate(book),
+        job_id=job_id,
+        message=message,
+    )
 
 
 # ── Outline subroutes ─────────────────────────────────────────────────────────
@@ -140,45 +205,56 @@ async def approve_outline(
     return book
 
 
-@router.post("/{book_id}/outline/revise", response_model=BookResponse)
+@router.post("/{book_id}/outline/revise", response_model=AdvanceResponse)
 async def revise_outline(
     book_id: str,
     body: OutlineReviseRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Book:
+) -> AdvanceResponse:
     book = await book_service.get_book(db, book_id, user.id)
     _require_book_status(book, BookStatus.OUTLINE_REVIEW)
 
     try:
-        provider = get_provider_for_user(user)
+        get_provider_for_user(user)
     except InvalidKey as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    await outline_service.revise_outline(
-        db=db, book=book, provider=provider, revision_notes=body.revision_notes
+    job = await job_service.enqueue_outline(
+        db=db,
+        book=book,
+        notes_before=body.revision_notes,
     )
     await db.commit()
     await db.refresh(book)
-    return book
+
+    return AdvanceResponse(
+        book=BookResponse.model_validate(book),
+        job_id=job.id,
+        message="Outline revision queued",
+    )
 
 
 # ── Final review subroutes ────────────────────────────────────────────────────
 
-@router.post("/{book_id}/final-review/approve", response_model=BookResponse)
+@router.post("/{book_id}/final-review/approve", response_model=AdvanceResponse)
 async def approve_final_review(
     book_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Book:
-    """Approve the final review and compile the book."""
+) -> AdvanceResponse:
     book = await book_service.get_book(db, book_id, user.id)
     _require_book_status(book, BookStatus.FINAL_REVIEW)
 
-    await compiler_service.compile_book(db=db, book=book)
+    job = await job_service.enqueue_compile(db=db, book=book)
     await db.commit()
     await db.refresh(book)
-    return book
+
+    return AdvanceResponse(
+        book=BookResponse.model_validate(book),
+        job_id=job.id,
+        message="Compilation queued",
+    )
 
 
 @router.post("/{book_id}/final-review/revise", response_model=BookResponse)
@@ -188,11 +264,8 @@ async def revise_final_review(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Book:
-    """Send the book back for chapter revision with final notes."""
     book = await book_service.get_book(db, book_id, user.id)
     _require_book_status(book, BookStatus.FINAL_REVIEW)
-
-    # Attach notes to the book and revert to chapter review
     book.status = BookStatus.CHAPTER_REVIEW
     db.add(book)
     await db.commit()
@@ -202,18 +275,24 @@ async def revise_final_review(
 
 # ── Compile + download ────────────────────────────────────────────────────────
 
-@router.post("/{book_id}/compile", response_model=BookResponse)
+@router.post("/{book_id}/compile", response_model=AdvanceResponse)
 async def compile_book(
     book_id: str,
     output_format: OutputFormat = OutputFormat.DOCX,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Book:
+) -> AdvanceResponse:
     book = await book_service.get_book(db, book_id, user.id)
-    await compiler_service.compile_book(db=db, book=book, output_format=output_format)
+    job = await job_service.enqueue_compile(
+        db=db, book=book, output_format=output_format.value
+    )
     await db.commit()
     await db.refresh(book)
-    return book
+    return AdvanceResponse(
+        book=BookResponse.model_validate(book),
+        job_id=job.id,
+        message="Compilation queued",
+    )
 
 
 @router.get("/{book_id}/download")

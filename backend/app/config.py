@@ -86,7 +86,19 @@ class Settings(BaseSettings):
     openrouter_demo_key: str = ""    # optional, only needed for DEMO_MODE
     demo_mode: bool = False
 
-    # ── Feature flags ─────────────────────────────────────────────────────────
+    # ── Sentry ───────────────────────────────────────────────────────────────────
+    sentry_dsn: str = ""   # leave empty to disable
+
+    # ── ECS / Fargate (production only) ──────────────────────────────────────────
+    ecs_cluster: str = ""
+    ecs_task_definition: str = ""
+    ecs_subnet_ids: str = ""
+    ecs_security_group_ids: str = ""
+
+    # ── Internal API secret (EventBridge reconciliation) ─────────────────────────
+    app_internal_secret: str = ""
+
+        # ── Feature flags ─────────────────────────────────────────────────────────
     storage_backend: StorageBackend = StorageBackend.local
 
     # ── Derived helpers ───────────────────────────────────────────────────────
