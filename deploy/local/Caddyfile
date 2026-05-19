@@ -1,24 +1,9 @@
-# deploy/local/Caddyfile
-#
-# Caddy handles:
-#   - Automatic HTTPS (Let's Encrypt) for your domain
-#   - Reverse proxy: /api/* → FastAPI, everything else → Next.js
-#   - HTTP/2 and HTTP/3 out of the box
-#
-# Replace bookforge.yourdomain.com with your actual domain.
-# For local dev without a domain, replace with :80 and remove tls settings.
-
-bookforge.yourdomain.com {
-    # /api/* and /docs → FastAPI backend
+:80 {
     handle /api/* {
         reverse_proxy api:8080
     }
 
     handle /docs {
-        reverse_proxy api:8080
-    }
-
-    handle /openapi.json {
         reverse_proxy api:8080
     }
 
@@ -30,36 +15,46 @@ bookforge.yourdomain.com {
         reverse_proxy api:8080
     }
 
-    # Everything else → Next.js frontend
     handle {
         reverse_proxy frontend:3000
     }
 
+    encode gzip
+
     # Security headers
     header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options SAMEORIGIN
-        Referrer-Policy strict-origin-when-cross-origin
-        -Server
-    }
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
 
-    # Compress responses
-    encode gzip zstd
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Remove server fingerprint
+        -Server
+
+        # Permissions policy — block unused browser features
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+        # Content Security Policy
+        # frame-ancestors replaces X-Frame-Options
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';"
+
+        # Defer to CSP for framing (kept for older browsers)
+        X-Frame-Options "DENY"
+    }
 
     log {
         output file /data/caddy/access.log {
             roll_size 10MB
             roll_keep 3
         }
+        # Redact auth tokens from logs
+        format filter {
+            wrap json
+            fields {
+                request>headers>Authorization replace REDACTED
+                request>headers>Cookie replace REDACTED
+            }
+        }
     }
 }
-
-# Local dev fallback (no domain) — uncomment and comment out the block above
-# :80 {
-#     handle /api/* {
-#         reverse_proxy api:8080
-#     }
-#     handle {
-#         reverse_proxy frontend:3000
-#     }
-# }

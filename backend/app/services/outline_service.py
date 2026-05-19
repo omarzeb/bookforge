@@ -56,7 +56,7 @@ async def generate_outline(
     # Extract chapter count hint from notes if specified
     import re
     chapter_match = re.search(r'\b(\d+)\s+chapters?\b', notes_before, re.IGNORECASE)
-    chapter_count = int(chapter_match.group(1)) if chapter_match else 10
+    chapter_count = min(int(chapter_match.group(1)), 50) if chapter_match else 10  # cap at 50
 
     prompt = resolve_outline(
         model_id=model_id,

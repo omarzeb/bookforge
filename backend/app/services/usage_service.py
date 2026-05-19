@@ -6,7 +6,7 @@ This powers the per-user usage dashboard.
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -39,7 +39,7 @@ async def log_usage(
         completion_tokens=completion_tokens,
         cost_usd=cost_usd,
         duration_ms=duration_ms,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(entry)
 
@@ -61,7 +61,7 @@ async def get_usage_summary(
     days: int = 30,
 ) -> dict:
     """Return usage summary for the last N days."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     result = await db.execute(
         select(UsageLog)

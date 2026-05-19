@@ -4,7 +4,7 @@ Worker task functions — one-shot Fargate pattern.
 
 import asyncio
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 
 import structlog
 
@@ -40,7 +40,7 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
             user = await db.get(User, book.user_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(timezone.utc)
             db.add(job)
             await db.commit()
 
@@ -57,7 +57,7 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.streamed_output = outline
                 db.add(job)
                 await db.commit()
@@ -69,7 +69,7 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
                              traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.error_message = f"Outline generation failed: {type(exc).__name__}"
                 db.add(job)
 
@@ -102,7 +102,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
             user = await db.get(User, book.user_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(timezone.utc)
             db.add(job)
             await db.commit()
 
@@ -129,7 +129,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                     if chapter is None:
                         logger.warning("no_pending_chapter", job_id=job_id)
                         job.status = JobStatus.DONE
-                        job.completed_at = datetime.utcnow()
+                        job.completed_at = datetime.now(timezone.utc)
                         job.streamed_output = "No pending chapters found"
                         db.add(job)
                         await db.commit()
@@ -143,7 +143,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.streamed_output = chapter.content or ""
                 db.add(job)
                 await db.commit()
@@ -155,7 +155,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                              traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.error_message = f"Chapter generation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()
@@ -178,7 +178,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
             book = await db.get(Book, job.book_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(timezone.utc)
             db.add(job)
             await db.commit()
 
@@ -192,7 +192,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.streamed_output = f"Compiled: {path}"
                 db.add(job)
                 await db.commit()
@@ -204,7 +204,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
                              traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
                 job.error_message = f"Compilation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()

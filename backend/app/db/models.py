@@ -7,7 +7,7 @@ Alembic reads these to generate migrations.
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
@@ -33,7 +33,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
