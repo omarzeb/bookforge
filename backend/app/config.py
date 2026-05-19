@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     # ── JWT auth ──────────────────────────────────────────────────────────────
     jwt_secret: str = Field(..., min_length=16)
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 10080  # 7 days
+    jwt_expire_minutes: int = 60     # 1 hour — short-lived access tokens
 
     # ── AWS (only used in production / when storage_backend=s3) ───────────────
     aws_region: str = "us-east-1"
@@ -88,6 +88,9 @@ class Settings(BaseSettings):
 
     # ── Sentry ───────────────────────────────────────────────────────────────────
     sentry_dsn: str = ""   # leave empty to disable
+
+    # ── CORS ─────────────────────────────────────────────────────────────────────
+    frontend_origin: str = "http://localhost:3000"  # comma-separated list
 
     # ── ECS / Fargate (production only) ──────────────────────────────────────────
     ecs_cluster: str = ""
@@ -138,8 +141,15 @@ class Settings(BaseSettings):
     @field_validator("jwt_secret")
     @classmethod
     def jwt_secret_must_not_be_placeholder(cls, v: str) -> str:
-        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me", "test-secret"}
-        # Allow "test-secret" only in test env — handled at app startup instead
+        import os
+        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me"}
+        # Allow "test-secret" only in test/dev environments
+        if os.environ.get("APP_ENV", "development") == "production":
+            bad.add("test-secret")
+        if v in bad:
+            raise ValueError(
+                "jwt_secret is a placeholder — set a real secret in .env"
+            )
         return v
 
 

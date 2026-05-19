@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import structlog
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -53,13 +56,26 @@ def create_app() -> FastAPI:
     # Correlation ID must be first so all subsequent middleware/handlers get the ID
     application.add_middleware(CorrelationIdMiddleware)
 
+    # CORS: never use allow_origins=["*"] with allow_credentials=True
+    # (spec prohibits it). Read explicit origins from env.
+    frontend_origin = getattr(settings, "frontend_origin", "http://localhost:3000")
+    allowed_origins = [o.strip() for o in frontend_origin.split(",") if o.strip()]
+
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.is_development else [],
+        allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Correlation-ID"],
     )
+
+    # Rate limiting
+    from app.core.rate_limit import limiter
+    from app.config import settings as s
+    limiter._storage_uri = s.redis_url if s.redis_url else "memory://"
+    application.state.limiter = limiter
+    application.add_middleware(SlowAPIMiddleware)
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     register_exception_handlers(application)
 

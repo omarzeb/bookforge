@@ -65,12 +65,12 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
                 logger.info("outline_task_done", job_id=job_id)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("outline_task_failed", job_id=job_id, error=str(exc))
+                logger.error("outline_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.error_message = f"Outline generation failed: {type(exc).__name__}"
                 db.add(job)
 
                 book.status = BookStatus.FAILED
@@ -151,12 +151,12 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                 logger.info("chapter_task_done", job_id=job_id, chapter=chapter.number)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("chapter_task_failed", job_id=job_id, error=str(exc))
+                logger.error("chapter_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.error_message = f"Chapter generation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()
 
@@ -200,12 +200,12 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
                 logger.info("compile_task_done", job_id=job_id, path=path)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("compile_task_failed", job_id=job_id, error=str(exc))
+                logger.error("compile_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.error_message = f"Compilation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()
 

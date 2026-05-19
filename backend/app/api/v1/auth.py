@@ -3,9 +3,11 @@ Auth routes — register and login.
 Returns a JWT bearer token used for all subsequent requests.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=12, description='Minimum 12 characters')
 
 
 class TokenResponse(BaseModel):
@@ -30,7 +32,8 @@ class TokenResponse(BaseModel):
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered")
+        # Return same shape to prevent account enumeration (issue #16)
+        raise HTTPException(status_code=409, detail="Unable to create account with these credentials")
 
     user = User(email=body.email, hashed_password=hash_password(body.password))
     db.add(user)
@@ -48,7 +51,9 @@ async def login(
     result = await db.execute(select(User).where(User.email == form.username))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(form.password, user.hashed_password):
+    # Always run bcrypt to prevent timing-based user enumeration (issue #17)
+    from app.core.auth import verify_password_constant_time
+    if not verify_password_constant_time(form.password, user.hashed_password if user else None):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

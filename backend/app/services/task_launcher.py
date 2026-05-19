@@ -88,7 +88,7 @@ async def _launch_fargate(
                 "awsvpcConfiguration": {
                     "subnets": ECS_SUBNET_IDS,
                     "securityGroups": ECS_SECURITY_GROUP_IDS,
-                    "assignPublicIp": "ENABLED",
+                    "assignPublicIp": "DISABLED"  # workers use private subnets with NAT,
                 }
             },
             overrides={
