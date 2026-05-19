@@ -58,3 +58,8 @@
         }
     }
 }
+
+# RQ dashboard — only accessible via SSH tunnel or local network
+# Access: ssh -L 9181:localhost:9181 yourserver
+# Then open http://localhost:9181
+# NOT exposed via the main :80 block intentionally

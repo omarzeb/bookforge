@@ -67,6 +67,8 @@ class OpenRouterProvider(LLMProvider):
         self._api_key = api_key
         self._client = _make_client(api_key)
 
+    MAX_TOKENS_HARD_LIMIT = 16384   # prevents runaway completions (issue #39)
+
     async def generate(
         self,
         *,

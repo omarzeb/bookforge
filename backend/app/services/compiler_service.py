@@ -46,7 +46,7 @@ async def compile_book(
         raise ConflictError(f"Chapters not yet approved: {', '.join(nums)}")
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    filename = f"{_sanitize(book.title)}.{output_format.value}"
+    filename = f"{book.id}.{output_format.value}"  # UUID filename — safe, no path traversal
     filepath = str(Path(output_dir) / filename)
 
     if output_format == OutputFormat.DOCX:

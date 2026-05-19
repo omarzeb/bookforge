@@ -138,6 +138,14 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("redis_url")
+    @classmethod
+    def redis_url_must_be_tls_in_production(cls, v: str, info) -> str:
+        import os
+        if os.environ.get("APP_ENV") == "production" and v and not v.startswith("rediss://"):
+            raise ValueError("Redis must use TLS (rediss://) in production")
+        return v
+
     @field_validator("jwt_secret")
     @classmethod
     def jwt_secret_must_not_be_placeholder(cls, v: str) -> str:

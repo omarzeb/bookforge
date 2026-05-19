@@ -41,6 +41,9 @@ resource "aws_apprunner_service" "api" {
       access_role_arn = var.access_role_arn
     }
 
+    # WARNING: auto-deploy on :latest means any ECR push goes straight to prod.
+    # Mitigate by: using git-SHA tags (done in CI), not pushing :latest manually,
+    # and restricting ECR push permissions to the CI role only.
     auto_deployments_enabled = true
   }
 

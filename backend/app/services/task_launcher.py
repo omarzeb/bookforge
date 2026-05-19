@@ -74,9 +74,13 @@ async def _launch_fargate(
 
     ecs = boto3.client("ecs", region_name=settings.aws_region)
 
+    # Bound env var values — ECS has a ~32KB combined limit (issue #37)
+    MAX_ENV_VAR_LEN = 4096
+    safe_env = {k: str(v)[:MAX_ENV_VAR_LEN] for k, v in extra_env.items()}
+
     env_overrides = [
         {"name": "JOB_ID", "value": job.id},
-        *[{"name": k, "value": v} for k, v in extra_env.items()],
+        *[{"name": k, "value": v} for k, v in safe_env.items()],
     ]
 
     try:
