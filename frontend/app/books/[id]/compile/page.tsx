@@ -43,7 +43,7 @@ export default function CompilePage() {
     const blob = await res.blob()
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${book.title}.${book.output_format ?? format}`
+    a.download = `${book?.title ?? 'book'}.${book?.output_format ?? format}`
     a.click()
   }
 
@@ -102,7 +102,7 @@ export default function CompilePage() {
             <span className="text-2xl">✅</span>
             <div>
               <p className="font-medium text-green-900">Your book is ready</p>
-              <p className="text-sm text-green-700">Compiled as .{book.output_format ?? 'docx'}</p>
+              <p className="text-sm text-green-700">Compiled as .{book?.output_format ?? 'docx'}</p>
             </div>
           </div>
           <button

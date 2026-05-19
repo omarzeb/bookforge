@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -84,7 +84,7 @@ export default function BooksPage() {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-sub)' }}>Model</label>
-              <ModelDropdown value={model} onChange={setModel} showAll />
+              <ModelDropdown value={model} onChange={setModel} />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-sub)' }}>

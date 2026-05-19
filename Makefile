@@ -56,3 +56,16 @@ help:
 	@echo "  make tf-apply      Apply infrastructure changes"
 	@echo "  make destroy-aws   Tear down all AWS resources"
 	@echo ""
+
+# ── Self-hosted deployment ────────────────────────────────────────────────────
+deploy-local:
+	docker compose -f deploy/local/docker-compose.yml up -d --build
+
+seed:
+	docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed.py
+
+backup:
+	bash deploy/local/scripts/backup.sh
+
+migrate-prod:
+	docker compose -f deploy/local/docker-compose.yml exec api alembic upgrade head

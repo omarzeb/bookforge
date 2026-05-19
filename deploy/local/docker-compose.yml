@@ -1,3 +1,7 @@
+# deploy/local/docker-compose.yml
+# Full production-like stack for self-hosted deployment.
+# For local dev, use docker-compose.override.yml on top of this.
+
 services:
 
   postgres:
@@ -7,8 +11,6 @@ services:
       POSTGRES_USER: bookforge
       POSTGRES_PASSWORD: bookforge
       POSTGRES_DB: bookforge
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,10 +22,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes   # persistence
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -34,9 +35,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      target: production
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     env_file:
       - ../../backend/.env
     environment:
@@ -44,7 +44,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: local
     volumes:
-      - ../../backend/output:/app/output
+      - output_data:/app/output
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +55,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.worker
+      target: production
     restart: unless-stopped
     env_file:
       - ../../backend/.env
@@ -63,25 +64,51 @@ services:
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: local
     volumes:
-      - ../../backend/output:/app/output
+      - output_data:/app/output
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  # RQ Dashboard — internal only, not exposed to the internet
-  # Visit http://localhost:9181 to monitor queues and jobs
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost"
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"    # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+
   rq-dashboard:
     image: eoranged/rq-dashboard:latest
     restart: unless-stopped
-    ports:
-      - "9181:9181"
     environment:
       RQ_DASHBOARD_REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
+    # NOT exposed externally — access via Caddy with auth or SSH tunnel only
+    # Use: ssh -L 9181:localhost:9181 yourserver then open http://localhost:9181
 
 volumes:
   postgres_data:
   redis_data:
+  output_data:
+  caddy_data:
+  caddy_config:

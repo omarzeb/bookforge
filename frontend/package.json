@@ -15,7 +15,8 @@
     "react-dom": "^18",
     "swr": "^2.2.5",
     "react-hot-toast": "^2.4.1",
-    "clsx": "^2.1.1"
+    "clsx": "^2.1.1",
+    "@sentry/nextjs": "^8.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -74,6 +74,7 @@ export function PromptEditor() {
   const selectedModel = dropdownModels.find(m => m.model_id === activeModel)
   const familyName = activeModel === '__all__' ? null : modelFamily(activeModel)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadStage() }, [activeStage, activeModel])
 
   async function loadStage() {

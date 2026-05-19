@@ -11,7 +11,7 @@ const KEY_STEPS = [
   {
     n: '1',
     title: 'Create a free account',
-    desc: "Go to openrouter.ai and sign up. It's free — no credit card needed just to register.",
+    desc: "Go to openrouter.ai and sign up. It&apos;s free — no credit card needed just to register.",
     link: { href: 'https://openrouter.ai', label: 'Go to openrouter.ai →' },
   },
   {
@@ -29,7 +29,7 @@ const KEY_STEPS = [
   {
     n: '4',
     title: 'Paste it below and click Save',
-    desc: "Paste the key into the field below. We'll make a quick test call to confirm it works before saving.",
+    desc: "Paste the key into the field below. We&apos;ll make a quick test call to confirm it works before saving.",
     link: null,
   },
 ]
@@ -180,7 +180,7 @@ export default function SettingsPage() {
                     style={{ background: 'var(--bg-subtle)', color: 'var(--text-sub)', border: '1px solid var(--border)' }}>
                     💡 <strong style={{ color: 'var(--text)' }}>Cost tip:</strong>{' '}
                     Start with $5 of credits. GPT-4o Mini costs about $0.02 per full book —
-                    that's 250 books for $5. Most books end up costing less than a cup of coffee.
+                    that is 250 books for $5. Most books end up costing less than a cup of coffee.
                   </div>
                 </div>
               </div>

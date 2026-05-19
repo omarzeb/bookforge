@@ -77,7 +77,7 @@ export default function ChapterPage() {
 
       {!chapter.content && (
         <div className="bg-gray-50 rounded-xl p-8 text-center text-gray-400">
-          <p>This chapter hasn't been generated yet.</p>
+          <p>This chapter has not been generated yet.</p>
           <p className="text-sm mt-1">Go back to the book and click Advance.</p>
         </div>
       )}
