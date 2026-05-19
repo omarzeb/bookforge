@@ -112,7 +112,8 @@ async def get_default_prompt(stage: str) -> dict:
         result = mod.get(**dummy_args[stage])
         return {"stage": stage, "system_prompt": result["system"]}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error("prompt_default_load_failed", stage=stage, error=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to load default prompt")
 
 
 @router.get("/{stage}", response_model=PromptOverrideResponse)

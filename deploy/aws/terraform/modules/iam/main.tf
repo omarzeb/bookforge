@@ -40,18 +40,24 @@ resource "aws_iam_role_policy" "app_runner_instance_policy" {
         Resource = var.s3_bucket
       },
       {
-        # Launch Fargate worker tasks
+        # Launch Fargate worker tasks — scoped to bookforge task definition only
         Effect   = "Allow"
         Action   = ["ecs:RunTask", "ecs:DescribeTasks", "ecs:StopTask"]
-        Resource = "*"
+        Resource = [
+          "arn:aws:ecs:*:${var.account_id}:task-definition/bookforge-worker*",
+          "arn:aws:ecs:*:${var.account_id}:task/bookforge/*",
+        ]
       },
       {
-        # Pass roles to ECS tasks
+        # Pass roles to ECS tasks — scoped to specific fargate roles only
         Effect   = "Allow"
         Action   = ["iam:PassRole"]
-        Resource = "*"
+        Resource = [
+          "arn:aws:iam::${var.account_id}:role/bookforge-fargate-execution",
+          "arn:aws:iam::${var.account_id}:role/bookforge-fargate-task",
+        ]
         Condition = {
-          StringLike = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
         }
       }
     ]

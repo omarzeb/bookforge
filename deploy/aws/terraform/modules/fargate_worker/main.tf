@@ -38,12 +38,12 @@ resource "aws_ecs_task_definition" "worker" {
       { name = "AWS_REGION",      value = var.region },
     ]
 
+    # Workers only need DB, Redis, and Fernet key.
+    # JWT_SECRET and APP_SECRET_KEY are NOT granted — workers never sign JWTs.
     secrets = [
-      { name = "DATABASE_URL",   valueFrom = "${var.secrets_arn_prefix}/database_url" },
-      { name = "REDIS_URL",      valueFrom = "${var.secrets_arn_prefix}/redis_url" },
-      { name = "FERNET_KEY",     valueFrom = "${var.secrets_arn_prefix}/fernet_key" },
-      { name = "JWT_SECRET",     valueFrom = "${var.secrets_arn_prefix}/jwt_secret" },
-      { name = "APP_SECRET_KEY", valueFrom = "${var.secrets_arn_prefix}/app_secret_key" },
+      { name = "DATABASE_URL", valueFrom = "${var.secrets_arn_prefix}/database_url" },
+      { name = "REDIS_URL",    valueFrom = "${var.secrets_arn_prefix}/redis_url" },
+      { name = "FERNET_KEY",   valueFrom = "${var.secrets_arn_prefix}/fernet_key" },
     ]
 
     logConfiguration = {

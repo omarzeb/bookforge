@@ -32,6 +32,11 @@ async def ingest_excel_upload(
     if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=422, detail="File must be an Excel file (.xlsx or .xls)")
 
+    # Check Content-Length before reading to prevent OOM on huge uploads
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 10MB)")
+
     contents = await file.read()
     if len(contents) > 10 * 1024 * 1024:  # 10 MB limit
         raise HTTPException(status_code=413, detail="File too large (max 10 MB)")

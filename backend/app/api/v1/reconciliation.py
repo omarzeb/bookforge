@@ -36,8 +36,11 @@ async def reconcile(
     Protected by X-Internal-Secret header — set the same value in
     EventBridge and in APP_INTERNAL_SECRET env var.
     """
+    import hmac as _hmac
     expected = getattr(settings, "app_internal_secret", "")
-    if not expected or x_internal_secret != expected:
+    if not expected:
+        raise HTTPException(status_code=503, detail="Internal secret not configured")
+    if not _hmac.compare_digest(x_internal_secret, expected):
         raise HTTPException(status_code=403, detail="Invalid internal secret")
 
     count = await reconcile_stuck_jobs(db, timeout_minutes=timeout_minutes)
