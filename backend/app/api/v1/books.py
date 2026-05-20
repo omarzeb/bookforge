@@ -59,6 +59,19 @@ async def create_book(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Book:
+    # Validate model_id against known models — prevents bypass of cost tiers
+    if body.selected_model:
+        from app.services.model_tiers import CURATED_MODEL_IDS
+        from sqlalchemy import select as _select
+        from app.db.models import ModelCache as _ModelCache
+        cached = await db.execute(_select(_ModelCache.model_id))
+        known_ids = CURATED_MODEL_IDS | {row[0] for row in cached.fetchall()}
+        if body.selected_model not in known_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="Unknown model — sync models list first via /api/v1/models/sync"
+            )
+
     book = await book_service.create_book(
         db=db,
         user_id=user.id,
@@ -307,7 +320,13 @@ async def download_book(
         raise HTTPException(status_code=404, detail="Book has not been compiled yet")
 
     import os
-    if not os.path.exists(book.compiled_path):
+    # Validate path stays within output directory — prevents arbitrary file read
+    output_dir = os.path.realpath("/app/output")
+    safe_path = os.path.realpath(book.compiled_path)
+    if not safe_path.startswith(output_dir + os.sep):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not os.path.exists(safe_path):
         raise HTTPException(status_code=404, detail="Compiled file not found on disk")
 
     media_types = {
@@ -317,7 +336,7 @@ async def download_book(
     media_type = media_types.get(book.output_format, "application/octet-stream")
 
     return FileResponse(
-        path=book.compiled_path,
+        path=safe_path,
         media_type=media_type,
         filename=os.path.basename(book.compiled_path),
     )

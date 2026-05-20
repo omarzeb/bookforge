@@ -10,6 +10,15 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir --prefix=/install -r requirements.txt
 
+
+# ── development: hot-reload for local docker-compose.override.yml ─────────────
+FROM builder AS development
+COPY --from=builder /install /usr/local
+COPY . .
+RUN mkdir -p /app/output
+EXPOSE 8080
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
 # ── runner: clean image with no compilers ────────────────────────────────────
 FROM python:3.11-slim AS production
 WORKDIR /app

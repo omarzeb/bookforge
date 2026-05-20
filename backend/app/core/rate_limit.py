@@ -1,17 +1,21 @@
 """
 Rate limiting via slowapi + Redis.
 
-Limits:
-- Auth endpoints: 5/minute per IP (brute-force protection)
-- Advance/revise: 10/minute per user (cost-incurring actions)
-- Book creation: 20/day per user
+The Limiter must be constructed with storage_uri at import time.
+Import this module AFTER settings are loaded.
 """
+from app.config import settings
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Rate limiter backed by Redis (Upstash in prod, local Redis in dev)
+def _get_redis_uri() -> str:
+    """Use Redis if configured, fall back to in-memory for tests."""
+    if settings.redis_url:
+        return settings.redis_url
+    return "memory://"
+
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri=None,   # set dynamically in create_app()
+    storage_uri=_get_redis_uri(),
     default_limits=["200/minute"],
 )

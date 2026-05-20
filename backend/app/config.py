@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # ── Application ───────────────────────────────────────────────────────────
     app_env: AppEnv = AppEnv.development
     debug: bool = False
-    app_secret_key: str = Field(..., min_length=16)
+    app_secret_key: str = Field(..., min_length=32)  # HMAC pepper — NIST recommends >=32 bytes
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = Field(
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     )
 
     # ── JWT auth ──────────────────────────────────────────────────────────────
-    jwt_secret: str = Field(..., min_length=16)
+    jwt_secret: str = Field(..., min_length=32)  # HS256 key — NIST recommends >=32 bytes
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60     # 1 hour — short-lived access tokens
 

@@ -89,7 +89,7 @@ docker compose -f deploy/local/docker-compose.yml up -d --build
 
 # Run migrations and seed demo data
 docker compose -f deploy/local/docker-compose.yml exec api alembic upgrade head
-docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed.py
+docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed_dev.py
 ```
 
 Visit **http://localhost** — login with `demo@bookforge.app` / `demo1234`

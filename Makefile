@@ -62,7 +62,7 @@ deploy-local:
 	docker compose -f deploy/local/docker-compose.yml up -d --build
 
 seed:
-	docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed.py
+	docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed_dev.py
 
 backup:
 	bash deploy/local/scripts/backup.sh

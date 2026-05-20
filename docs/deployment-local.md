@@ -36,7 +36,7 @@ docker compose -f deploy/local/docker-compose.yml up -d --build
 
 ```bash
 docker compose -f deploy/local/docker-compose.yml exec api alembic upgrade head
-docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed.py
+docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed_dev.py
 ```
 
 ### 4. Set up Cloudflare Tunnel

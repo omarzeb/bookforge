@@ -3,7 +3,7 @@ Pydantic schemas for API request/response bodies.
 """
 
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.db.models import BookStatus, OutputFormat
 
 
@@ -18,12 +18,12 @@ class BookCreate(BaseModel):
 
 class BookResponse(BaseModel):
     id: str
-    title: str = Field(..., min_length=1, max_length=200)
+    title: str                          # no Field bounds on response models
     status: BookStatus
     selected_model: str | None
     outline_raw: str | None
     outline_approved: bool
-    compiled_path: str | None
+    # compiled_path intentionally omitted — internal filesystem path
     output_format: OutputFormat | None
     created_at: datetime
     updated_at: datetime
@@ -47,11 +47,11 @@ class ChapterResponse(BaseModel):
     id: str
     book_id: str
     number: int
-    title: str = Field(..., min_length=1, max_length=200)
+    title: str                          # no Field bounds on response models
     content: str | None
     summary: str | None
     approved: bool
-    revision_notes: str = Field(..., min_length=1, max_length=5000) | None
+    revision_notes: str | None = None   # correct optional type
     created_at: datetime
     updated_at: datetime
 

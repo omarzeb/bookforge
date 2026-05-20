@@ -1,46 +1,32 @@
-:80 {
+# Production: replace with your real domain for auto-HTTPS
+# Local dev without a domain: use :80 block (commented out below)
+
+bookforge.yourdomain.com {
     handle /api/* {
         reverse_proxy api:8080
     }
-
     handle /docs {
         reverse_proxy api:8080
     }
-
     handle /health {
         reverse_proxy api:8080
     }
-
     handle /ready {
         reverse_proxy api:8080
     }
-
     handle {
         reverse_proxy frontend:3000
     }
 
     encode gzip
 
-    # Security headers
     header {
-        # Prevent MIME sniffing
         X-Content-Type-Options "nosniff"
-
-        # Referrer policy
         Referrer-Policy "strict-origin-when-cross-origin"
-
-        # Remove server fingerprint
-        -Server
-
-        # Permissions policy — block unused browser features
         Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-
-        # Content Security Policy
-        # frame-ancestors replaces X-Frame-Options
         Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';"
-
-        # Defer to CSP for framing (kept for older browsers)
         X-Frame-Options "DENY"
+        -Server
     }
 
     log {
@@ -48,18 +34,19 @@
             roll_size 10MB
             roll_keep 3
         }
-        # Redact auth tokens from logs
-        format filter {
-            wrap json
-            fields {
-                request>headers>Authorization replace REDACTED
-                request>headers>Cookie replace REDACTED
-            }
-        }
+        format json
     }
 }
 
-# RQ dashboard — only accessible via SSH tunnel or local network
-# Access: ssh -L 9181:localhost:9181 yourserver
-# Then open http://localhost:9181
-# NOT exposed via the main :80 block intentionally
+# ── Local dev without a domain (HTTP only) ────────────────────────────────────
+# Uncomment this block and comment out the block above when running locally
+# without a Cloudflare tunnel or real domain.
+#
+# :80 {
+#     handle /api/* { reverse_proxy api:8080 }
+#     handle /docs  { reverse_proxy api:8080 }
+#     handle /health { reverse_proxy api:8080 }
+#     handle /ready  { reverse_proxy api:8080 }
+#     handle { reverse_proxy frontend:3000 }
+#     encode gzip
+# }

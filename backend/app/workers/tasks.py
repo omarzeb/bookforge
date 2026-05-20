@@ -193,7 +193,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
 
                 job.status = JobStatus.DONE
                 job.completed_at = datetime.now(timezone.utc)
-                job.streamed_output = f"Compiled: {path}"
+                job.streamed_output = "Compiled successfully"  # path intentionally omitted
                 db.add(job)
                 await db.commit()
 

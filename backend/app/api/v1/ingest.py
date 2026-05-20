@@ -3,7 +3,7 @@ Excel ingestion route.
 """
 
 import structlog
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/books", tags=["ingest"])
 
 @router.post("/ingest-excel", response_model=list[BookResponse], status_code=201)
 async def ingest_excel_upload(
+    request: Request,
     file: UploadFile = File(..., description="Excel file with 'title' column"),
     selected_model: str | None = None,
     db: AsyncSession = Depends(get_db),

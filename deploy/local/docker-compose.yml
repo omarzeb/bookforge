@@ -44,7 +44,7 @@ services:
       - ../../backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bookforge}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       STORAGE_BACKEND: local
     volumes:
       - output_data:/app/output
@@ -64,7 +64,7 @@ services:
       - ../../backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bookforge}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       STORAGE_BACKEND: local
     volumes:
       - output_data:/app/output
@@ -103,7 +103,7 @@ services:
     image: eoranged/rq-dashboard:latest
     restart: unless-stopped
     environment:
-      RQ_DASHBOARD_REDIS_URL: redis://redis:6379/0
+      RQ_DASHBOARD_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     depends_on:
       - redis
     # NOT exposed externally — access via Caddy with auth or SSH tunnel only
