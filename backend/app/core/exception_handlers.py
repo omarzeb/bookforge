@@ -57,7 +57,19 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ProviderError)
     async def provider_handler(request: Request, exc: ProviderError) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        import structlog
+        logger = structlog.get_logger("exception_handlers")
+        logger.warning("provider_error", error=str(exc), exc_type=type(exc).__name__)
+        # Return a fixed message — never reflect raw upstream error text to client
+        user_messages = {
+            "InvalidKey": "Your OpenRouter API key is invalid. Check Settings.",
+            "OutOfCredits": "Your OpenRouter account has insufficient credits.",
+            "RateLimited": "Too many requests to the AI provider. Please wait and try again.",
+            "ContextTooLong": "The book content is too long for this model. Try a model with a larger context window.",
+            "ModelNotFound": "The selected model is unavailable. Please choose a different model.",
+        }
+        msg = user_messages.get(type(exc).__name__, "The AI provider returned an error. Please try again.")
+        return JSONResponse(status_code=502, content={"detail": msg})
 
     @app.exception_handler(BookForgeError)
     async def generic_handler(request: Request, exc: BookForgeError) -> JSONResponse:

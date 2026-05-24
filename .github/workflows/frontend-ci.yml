@@ -49,3 +49,7 @@ jobs:
       - name: Build
         if: steps.check.outputs.ready == 'true'
         run: npm run build
+
+      - name: Audit
+        working-directory: frontend
+        run: npm audit --audit-level=high

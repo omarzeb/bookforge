@@ -19,11 +19,6 @@ from app.services.chapter_service import get_chapters
 logger = structlog.get_logger(__name__)
 
 
-def _sanitize(title: str) -> str:
-    safe = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
-    return safe.strip().replace(" ", "_")[:80]
-
-
 async def compile_book(
     db: AsyncSession,
     book: Book,
@@ -32,9 +27,12 @@ async def compile_book(
 ) -> str:
     """
     Compile the book into a file.
-    Returns the file path (local) or S3 key (production).
-    Phase 6 will swap local writes for S3 uploads via storage_backend dependency.
+    Returns the local file path (dev) or S3 key (production).
+    In production (STORAGE_BACKEND=s3) the file is uploaded to S3 and
+    compiled_path stores the S3 key instead of a local path.
     """
+    from app.config import settings
+
     chapters = await get_chapters(db, book.id)
 
     if not chapters:
@@ -45,22 +43,51 @@ async def compile_book(
         nums = [str(c.number) for c in unapproved]
         raise ConflictError(f"Chapters not yet approved: {', '.join(nums)}")
 
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    filename = f"{book.id}.{output_format.value}"  # UUID filename — safe, no path traversal
-    filepath = str(Path(output_dir) / filename)
+    filename = f"{book.id}.{output_format.value}"
 
-    if output_format == OutputFormat.DOCX:
-        _write_docx(book, chapters, filepath)
+    if settings.storage_backend.value == "s3":
+        # Write to a temp file then upload to S3
+        import tempfile, boto3
+        with tempfile.NamedTemporaryFile(suffix=f".{output_format.value}", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        if output_format == OutputFormat.DOCX:
+            _write_docx(book, chapters, tmp_path)
+        else:
+            _write_txt(book, chapters, tmp_path)
+
+        s3_key = f"books/{book.user_id}/{filename}"
+        s3 = boto3.client("s3", region_name=settings.aws_region)
+        import os
+        try:
+            s3.upload_file(tmp_path, settings.aws_s3_bucket, s3_key)
+        finally:
+            os.unlink(tmp_path)  # always clean up temp file
+
+        book.compiled_path = s3_key   # S3 key, not local path
+        book.output_format = output_format
+        book.status = BookStatus.COMPLETE
+        db.add(book)
+
+        logger.info("book_compiled_s3", book_id=book.id, s3_key=s3_key)
+        return s3_key
     else:
-        _write_txt(book, chapters, filepath)
+        # Local storage (dev)
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        filepath = str(Path(output_dir) / filename)
 
-    book.compiled_path = filepath
-    book.output_format = output_format
-    book.status = BookStatus.COMPLETE
-    db.add(book)
+        if output_format == OutputFormat.DOCX:
+            _write_docx(book, chapters, filepath)
+        else:
+            _write_txt(book, chapters, filepath)
 
-    logger.info("book_compiled", book_id=book.id, path=filepath, fmt=output_format)
-    return filepath
+        book.compiled_path = filepath
+        book.output_format = output_format
+        book.status = BookStatus.COMPLETE
+        db.add(book)
+
+        logger.info("book_compiled_local", book_id=book.id, path=filepath)
+        return filepath
 
 
 def _write_docx(book: Book, chapters: list, filepath: str) -> None:

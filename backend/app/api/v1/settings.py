@@ -67,3 +67,15 @@ async def get_key_status(
 ) -> KeyStatusResponse:
     """Returns whether the user has a saved OpenRouter key (not the key itself)."""
     return KeyStatusResponse(has_key=bool(user.encrypted_api_key))
+
+
+@router.delete("/openrouter-key", status_code=204)
+async def delete_openrouter_key(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Remove the stored OpenRouter API key."""
+    user.encrypted_api_key = None
+    db.add(user)
+    await db.commit()
+    logger.info("api_key_deleted", user_id=user.id)

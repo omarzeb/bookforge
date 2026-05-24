@@ -3,6 +3,7 @@ Chapter routes.
 """
 
 import structlog
+from app.core.rate_limit import limiter, user_limiter
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 

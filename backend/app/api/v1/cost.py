@@ -7,6 +7,7 @@ GET /models/{model_id}/estimate?chapters=10
 """
 
 import structlog
+from app.core.rate_limit import limiter, user_limiter
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -107,6 +108,7 @@ async def estimate_cost(
     )
 
 
+@user_limiter.limit("2/minute")
 @router.post("/models/sync")
 async def sync_models_endpoint(
     db: AsyncSession = Depends(get_db),

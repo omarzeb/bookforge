@@ -84,6 +84,7 @@ class OpenRouterProvider(LLMProvider):
         db=None,
     ) -> GenerateResult:
         start = time.time()
+        max_tokens = min(max_tokens, self.MAX_TOKENS_HARD_LIMIT)  # clamp
         try:
             response = await self._client.chat.completions.create(
                 model=model,
@@ -164,6 +165,7 @@ class OpenRouterProvider(LLMProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
+        max_tokens = min(max_tokens, self.MAX_TOKENS_HARD_LIMIT)  # clamp
         try:
             async with self._client.chat.completions.stream(
                 model=model,

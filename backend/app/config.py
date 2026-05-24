@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     storage_backend: StorageBackend = StorageBackend.local
 
     # ── Derived helpers ───────────────────────────────────────────────────────
+
+    @model_validator(mode="after")
+    def validate_s3_in_production(self) -> "Settings":
+        if self.is_production and self.storage_backend.value == "s3":
+            if not getattr(self, "aws_s3_bucket", ""):
+                raise ValueError(
+                    "AWS_S3_BUCKET must be set when STORAGE_BACKEND=s3 in production"
+                )
+        return self
+
     @property
     def is_production(self) -> bool:
         return self.app_env == AppEnv.production
@@ -144,6 +154,21 @@ class Settings(BaseSettings):
         import os
         if os.environ.get("APP_ENV") == "production" and v and not v.startswith("rediss://"):
             raise ValueError("Redis must use TLS (rediss://) in production")
+        return v
+
+
+    @field_validator("app_secret_key")
+    @classmethod
+    def app_secret_key_must_not_be_placeholder(cls, v: str) -> str:
+        import os
+        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me", "change-me-in-prod"}
+        if os.environ.get("APP_ENV", "development") == "production":
+            bad.add("test-secret")
+        if v in bad:
+            raise ValueError(
+                "app_secret_key is a placeholder — set a real 32+ character secret. "
+                "Warning: changing this invalidates all stored passwords."
+            )
         return v
 
     @field_validator("jwt_secret")

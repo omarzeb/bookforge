@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import create_access_token, hash_password, verify_password, verify_password_constant_time
+from app.core.auth import create_access_token, hash_password, verify_password_constant_time
 from app.db.models import User
 from app.db.session import get_db
 

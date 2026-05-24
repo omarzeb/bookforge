@@ -34,7 +34,10 @@ class ModelResponse(BaseModel):
 
 
 @router.get("", response_model=list[ModelResponse])
-async def list_models(db: AsyncSession = Depends(get_db)) -> list[ModelCache]:
+async def list_models(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> list[ModelCache]:
     """
     Return the cached model list grouped by tier.
     Triggers a sync if the cache is empty.

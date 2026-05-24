@@ -1,0 +1,148 @@
+# Covers both API and worker — builds, pushes, and re-registers both ECR images.
+# worker-deploy.yml was merged here to avoid duplicate CI runs.
+name: Deploy Backend & Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC → AWS role assumption
+
+env:
+  AWS_REGION: us-east-1
+  ECR_API_REPO: bookforge-api
+  ECR_WORKER_REPO: bookforge-worker
+  APP_RUNNER_SERVICE: bookforge-api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bookforge
+          POSTGRES_PASSWORD: bookforge
+          POSTGRES_DB: bookforge
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s --health-timeout 5s --health-retries 5
+        ports: ["5432:5432"]
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 5
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+asyncpg://bookforge:bookforge@localhost:5432/bookforge
+          REDIS_URL: redis://localhost:6379/0
+          APP_SECRET_KEY: test-secret-key-for-ci-only
+          FERNET_KEY: ${{ secrets.TEST_FERNET_KEY }}
+          JWT_SECRET: test-jwt-secret-for-ci-only
+          FRONTEND_ORIGIN: http://localhost:3000
+        run: pytest tests/ -v --tb=short
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS via OIDC (no long-lived access keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push API image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_API_REPO:latest \
+            backend/
+          docker push $ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_API_REPO:latest
+
+      - name: Build & push worker image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_WORKER_REPO:latest \
+            -f backend/Dockerfile.worker backend/
+          docker push $ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_WORKER_REPO:latest
+
+      - name: Update App Runner service
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='$APP_RUNNER_SERVICE'].ServiceArn" \
+            --output text)
+          aws apprunner update-service \
+            --service-arn "$SERVICE_ARN" \
+            --source-configuration "{
+              \"ImageRepository\": {
+                \"ImageIdentifier\": \"$ECR_REGISTRY/$ECR_API_REPO:$IMAGE_TAG\",
+                \"ImageRepositoryType\": \"ECR\"
+              }
+            }"
+
+      - name: Register new worker task definition
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition bookforge-worker \
+            --query 'taskDefinition' --output json)
+
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REGISTRY/$ECR_WORKER_REPO:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $IMAGE
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+
+          aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF"
+          echo "Worker task definition updated to $IMAGE_TAG"

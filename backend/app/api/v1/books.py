@@ -5,6 +5,7 @@ advance() now returns a job_id immediately instead of blocking.
 """
 
 import structlog
+from app.core.rate_limit import limiter, user_limiter
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -26,6 +27,15 @@ from app.services import book_service, compiler_service, outline_service
 from app.services import job_service
 
 logger = structlog.get_logger(__name__)
+def _user_key(request):
+    """Rate limit key: authenticated user ID instead of IP."""
+    user = getattr(request.state, "user", None)
+    if user:
+        return str(user.id)
+    from slowapi.util import get_remote_address
+    return get_remote_address(request)
+
+
 router = APIRouter(prefix="/books", tags=["books"])
 
 
@@ -113,6 +123,7 @@ async def delete_book(
 
 # ── Advance — now async via job queue ────────────────────────────────────────
 
+@user_limiter.limit("10/minute")
 @router.post("/{book_id}/advance", response_model=AdvanceResponse)
 async def advance_book(
     book_id: str,
@@ -218,6 +229,7 @@ async def approve_outline(
     return book
 
 
+@user_limiter.limit("10/minute")
 @router.post("/{book_id}/outline/revise", response_model=AdvanceResponse)
 async def revise_outline(
     book_id: str,
@@ -288,6 +300,7 @@ async def revise_final_review(
 
 # ── Compile + download ────────────────────────────────────────────────────────
 
+@user_limiter.limit("5/minute")
 @router.post("/{book_id}/compile", response_model=AdvanceResponse)
 async def compile_book(
     book_id: str,
@@ -319,8 +332,24 @@ async def download_book(
     if not book.compiled_path:
         raise HTTPException(status_code=404, detail="Book has not been compiled yet")
 
+    from app.config import settings as _settings
+    if _settings.storage_backend.value == "s3":
+        # Generate a presigned S3 URL and redirect
+        import boto3
+        s3 = boto3.client("s3", region_name=_settings.aws_region)
+        try:
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": _settings.aws_s3_bucket, "Key": book.compiled_path},
+                ExpiresIn=300,  # 5 minute download window
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail="Compiled file not found")
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+
     import os
-    # Validate path stays within output directory — prevents arbitrary file read
+    # Local storage: validate path stays within output directory
     output_dir = os.path.realpath("/app/output")
     safe_path = os.path.realpath(book.compiled_path)
     if not safe_path.startswith(output_dir + os.sep):

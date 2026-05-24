@@ -3,39 +3,61 @@ name: Backend CI
 on:
   pull_request:
     paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bookforge
+          POSTGRES_PASSWORD: bookforge
+          POSTGRES_DB: bookforge
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s --health-timeout 5s --health-retries 5
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 5
+        ports: ["6379:6379"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
 
-      - name: Lint (ruff)
-        run: ruff check app/
+      - name: Lint
+        working-directory: backend
+        run: ruff check app/ tests/
 
-      - name: Type check (mypy)
-        run: mypy app/
-
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Test
+        working-directory: backend
         env:
           APP_ENV: test
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: postgresql+asyncpg://bookforge:bookforge@localhost:5432/bookforge
           REDIS_URL: redis://localhost:6379/0
+          APP_SECRET_KEY: test-secret-key-for-ci-only
           FERNET_KEY: ${{ secrets.TEST_FERNET_KEY }}
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-jwt-secret-for-ci-only
+          FRONTEND_ORIGIN: http://localhost:3000
+        run: pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+
+      - name: Audit dependencies
+        working-directory: backend
+        run: pip-audit -r requirements.txt

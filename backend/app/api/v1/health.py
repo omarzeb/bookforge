@@ -50,19 +50,27 @@ async def ready(
         checks["redis"] = "unavailable"
         healthy = False
 
-    # OpenRouter (lightweight — just a DNS/TCP check, no token burn)
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://openrouter.ai/api/v1/models",
-                timeout=5.0,
-                headers={"Authorization": "Bearer test"},  # will 401 but proves reachability
-            )
-            checks["openrouter"] = "ok" if resp.status_code in (200, 401) else "degraded"
-    except Exception as exc:
-        logger.warning("readiness_openrouter_failed", error=str(exc))
-        checks["openrouter"] = "unreachable"
+    # OpenRouter reachability — cached 30s to prevent amplification (issue #12)
+    import time as _time
+    _cache = getattr(ready, "_or_cache", {"ts": 0, "result": "unknown"})
+    if _time.time() - _cache["ts"] < 30:
+        checks["openrouter"] = _cache["result"]
+    else:
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://openrouter.ai/api/v1/models",
+                    timeout=5.0,
+                    headers={"Authorization": "Bearer test"},
+                )
+                result = "ok" if resp.status_code in (200, 401) else "degraded"
+        except Exception as exc:
+            logger.warning("readiness_openrouter_failed", error=str(exc))
+            result = "unreachable"
+        _cache = {"ts": _time.time(), "result": result}
+        ready._or_cache = _cache
+        checks["openrouter"] = result
         # Don't fail health for OpenRouter — it's external
 
     status_code = 200 if healthy else 503
