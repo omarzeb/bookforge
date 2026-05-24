@@ -1,35 +1,34 @@
-# Same three-stage pattern as Dockerfile.
-# Different entrypoint: runs one job then exits (Fargate one-shot pattern).
-
-FROM python:3.11-slim AS base
-
+FROM python:3.11-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
+    gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── development ───────────────────────────────────────────────────────────────
-FROM base AS development
 
-RUN pip install --no-cache-dir watchfiles
+# ── development stage ─────────────────────────────────────────────────────────
+FROM builder AS development
+COPY --from=builder /install /usr/local
+COPY . .
+RUN mkdir -p /app/output
+ENTRYPOINT ["python", "-m", "app.workers.runner"]
 
+FROM python:3.11-slim AS production
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
 COPY . .
 
-CMD ["python", "-m", "app.workers.runner"]
-
-# ── production ────────────────────────────────────────────────────────────────
-FROM base AS production
-
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-
-COPY --chown=appuser:appgroup . .
-
+RUN mkdir -p /app/output && chown appuser:appgroup /app/output
 USER appuser
 
-# Phase 7: Fargate passes --job-id <id> when launching this as a one-shot task
 ENTRYPOINT ["python", "-m", "app.workers.runner"]

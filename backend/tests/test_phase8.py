@@ -223,7 +223,7 @@ def test_user_override_replaces_system_prompt():
 
 
 def test_user_override_works_for_all_stages():
-    from app.prompts import resolve_chapter, resolve_chapter_revision, resolve_summary
+    from app.prompts import resolve_chapter, resolve_summary
 
     r1 = resolve_chapter(
         model_id="openai/gpt-4o", book_title="T", outline="o",

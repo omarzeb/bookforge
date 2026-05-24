@@ -1,65 +1,52 @@
-# deploy/local/Caddyfile
-#
-# Caddy handles:
-#   - Automatic HTTPS (Let's Encrypt) for your domain
-#   - Reverse proxy: /api/* → FastAPI, everything else → Next.js
-#   - HTTP/2 and HTTP/3 out of the box
-#
-# Replace bookforge.yourdomain.com with your actual domain.
-# For local dev without a domain, replace with :80 and remove tls settings.
+# Production: replace with your real domain for auto-HTTPS
+# Local dev without a domain: use :80 block (commented out below)
 
 bookforge.yourdomain.com {
-    # /api/* and /docs → FastAPI backend
     handle /api/* {
         reverse_proxy api:8080
     }
-
     handle /docs {
         reverse_proxy api:8080
     }
-
-    handle /openapi.json {
-        reverse_proxy api:8080
-    }
-
     handle /health {
         reverse_proxy api:8080
     }
-
     handle /ready {
         reverse_proxy api:8080
     }
-
-    # Everything else → Next.js frontend
     handle {
         reverse_proxy frontend:3000
     }
 
-    # Security headers
+    encode gzip
+
     header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options SAMEORIGIN
-        Referrer-Policy strict-origin-when-cross-origin
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';"
+        X-Frame-Options "DENY"
         -Server
     }
-
-    # Compress responses
-    encode gzip zstd
 
     log {
         output file /data/caddy/access.log {
             roll_size 10MB
             roll_keep 3
         }
+        format json
     }
 }
 
-# Local dev fallback (no domain) — uncomment and comment out the block above
+# ── Local dev without a domain (HTTP only) ────────────────────────────────────
+# Uncomment this block and comment out the block above when running locally
+# without a Cloudflare tunnel or real domain.
+#
 # :80 {
-#     handle /api/* {
-#         reverse_proxy api:8080
-#     }
-#     handle {
-#         reverse_proxy frontend:3000
-#     }
+#     handle /api/* { reverse_proxy api:8080 }
+#     handle /docs  { reverse_proxy api:8080 }
+#     handle /health { reverse_proxy api:8080 }
+#     handle /ready  { reverse_proxy api:8080 }
+#     handle { reverse_proxy frontend:3000 }
+#     encode gzip
 # }

@@ -4,13 +4,12 @@
 
 **AI-powered book generation — bring your own key, keep your words.**
 
-[![Tests](https://github.com/YOUR_USERNAME/book-forge/actions/workflows/backend-deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/book-forge/actions)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Terraform](https://img.shields.io/badge/Terraform-AWS-7B42BC?logo=terraform)](deploy/aws/terraform)
 
-[Live Demo](https://YOUR_APP_RUNNER_URL) · [Architecture](#architecture) · [Deployment](#deployment) · [API Docs](https://YOUR_APP_RUNNER_URL/docs)
+· [Architecture](#architecture) · [Deployment](#deployment) · [API Docs](https://YOUR_APP_RUNNER_URL/docs)
 
 </div>
 
@@ -89,7 +88,7 @@ docker compose -f deploy/local/docker-compose.yml up -d --build
 
 # Run migrations and seed demo data
 docker compose -f deploy/local/docker-compose.yml exec api alembic upgrade head
-docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed.py
+docker compose -f deploy/local/docker-compose.yml exec api python scripts/seed_dev.py
 ```
 
 Visit **http://localhost** — login with `demo@bookforge.app` / `demo1234`

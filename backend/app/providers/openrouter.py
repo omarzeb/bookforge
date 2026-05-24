@@ -2,8 +2,8 @@
 OpenRouter provider — instrumented with usage logging and Sentry.
 """
 
-from collections.abc import AsyncGenerator
 import time
+from collections.abc import AsyncGenerator
 
 import structlog
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError
@@ -32,12 +32,18 @@ def _make_client(api_key: str) -> AsyncOpenAI:
 def _map_error(exc: APIStatusError) -> Exception:
     code = exc.status_code
     msg = str(exc.message) if hasattr(exc, "message") else str(exc)
-    if code == 401: return InvalidKey(f"OpenRouter rejected the API key: {msg}")
-    if code == 402: return OutOfCredits("OpenRouter account has insufficient credits")
-    if code == 429: return RateLimited(f"Rate limited by OpenRouter: {msg}")
-    if code == 400 and "context" in msg.lower(): return ContextTooLong(f"Prompt exceeds context window: {msg}")
-    if code == 404: return ModelNotFound(f"Model not found: {msg}")
-    if code >= 500: return ProviderUnavailable(f"OpenRouter server error {code}: {msg}")
+    if code == 401:
+        return InvalidKey(f"OpenRouter rejected the API key: {msg}")
+    if code == 402:
+        return OutOfCredits("OpenRouter account has insufficient credits")
+    if code == 429:
+        return RateLimited(f"Rate limited by OpenRouter: {msg}")
+    if code == 400 and "context" in msg.lower():
+        return ContextTooLong(f"Prompt exceeds context window: {msg}")
+    if code == 404:
+        return ModelNotFound(f"Model not found: {msg}")
+    if code >= 500:
+        return ProviderUnavailable(f"OpenRouter server error {code}: {msg}")
     return ProviderUnavailable(f"Unexpected error {code}: {msg}")
 
 
@@ -67,6 +73,8 @@ class OpenRouterProvider(LLMProvider):
         self._api_key = api_key
         self._client = _make_client(api_key)
 
+    MAX_TOKENS_HARD_LIMIT = 16384   # prevents runaway completions (issue #39)
+
     async def generate(
         self,
         *,
@@ -82,6 +90,7 @@ class OpenRouterProvider(LLMProvider):
         db=None,
     ) -> GenerateResult:
         start = time.time()
+        max_tokens = min(max_tokens, self.MAX_TOKENS_HARD_LIMIT)  # clamp
         try:
             response = await self._client.chat.completions.create(
                 model=model,
@@ -111,9 +120,10 @@ class OpenRouterProvider(LLMProvider):
         # Log usage if context provided
         if db and user_id:
             try:
-                from app.services.usage_service import log_usage
-                from app.db.models import ModelCache
                 from sqlalchemy import select
+
+                from app.db.models import ModelCache
+                from app.services.usage_service import log_usage
 
                 # Try to get real pricing from cache
                 cache_result = await db.execute(
@@ -162,6 +172,7 @@ class OpenRouterProvider(LLMProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
+        max_tokens = min(max_tokens, self.MAX_TOKENS_HARD_LIMIT)  # clamp
         try:
             async with self._client.chat.completions.stream(
                 model=model,

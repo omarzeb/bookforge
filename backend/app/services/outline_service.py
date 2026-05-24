@@ -13,7 +13,6 @@ from app.parsers.outline_parser import NUDGE_PROMPT, parse_outline
 from app.parsers.text_cleaner import clean_text
 from app.prompts import resolve_outline
 from app.providers.base import LLMProvider
-from app.services.book_service import update_book_status
 
 logger = structlog.get_logger(__name__)
 
@@ -56,7 +55,7 @@ async def generate_outline(
     # Extract chapter count hint from notes if specified
     import re
     chapter_match = re.search(r'\b(\d+)\s+chapters?\b', notes_before, re.IGNORECASE)
-    chapter_count = int(chapter_match.group(1)) if chapter_match else 10
+    chapter_count = min(int(chapter_match.group(1)), 50) if chapter_match else 10  # cap at 50
 
     prompt = resolve_outline(
         model_id=model_id,

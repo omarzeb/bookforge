@@ -13,7 +13,7 @@ Usage:
 from enum import Enum
 from functools import lru_cache
 
-from pydantic import AnyUrl, Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # ── Application ───────────────────────────────────────────────────────────
     app_env: AppEnv = AppEnv.development
     debug: bool = False
-    app_secret_key: str = Field(..., min_length=16)
+    app_secret_key: str = Field(..., min_length=32)  # HMAC pepper — NIST recommends >=32 bytes
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = Field(
@@ -74,9 +74,9 @@ class Settings(BaseSettings):
     )
 
     # ── JWT auth ──────────────────────────────────────────────────────────────
-    jwt_secret: str = Field(..., min_length=16)
+    jwt_secret: str = Field(..., min_length=32)  # HS256 key — NIST recommends >=32 bytes
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 10080  # 7 days
+    jwt_expire_minutes: int = 60     # 1 hour — short-lived access tokens
 
     # ── AWS (only used in production / when storage_backend=s3) ───────────────
     aws_region: str = "us-east-1"
@@ -88,6 +88,9 @@ class Settings(BaseSettings):
 
     # ── Sentry ───────────────────────────────────────────────────────────────────
     sentry_dsn: str = ""   # leave empty to disable
+
+    # ── CORS ─────────────────────────────────────────────────────────────────────
+    frontend_origin: str = "http://localhost:3000"  # comma-separated list
 
     # ── ECS / Fargate (production only) ──────────────────────────────────────────
     ecs_cluster: str = ""
@@ -102,6 +105,15 @@ class Settings(BaseSettings):
     storage_backend: StorageBackend = StorageBackend.local
 
     # ── Derived helpers ───────────────────────────────────────────────────────
+
+    @model_validator(mode="after")
+    def validate_s3_in_production(self) -> "Settings":
+        if self.is_production and self.storage_backend.value == "s3" and not getattr(self, "aws_s3_bucket", ""):
+            raise ValueError(
+                "AWS_S3_BUCKET must be set when STORAGE_BACKEND=s3 in production"
+            )
+        return self
+
     @property
     def is_production(self) -> bool:
         return self.app_env == AppEnv.production
@@ -135,11 +147,41 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("redis_url")
+    @classmethod
+    def redis_url_must_be_tls_in_production(cls, v: str, info) -> str:
+        import os
+        if os.environ.get("APP_ENV") == "production" and v and not v.startswith("rediss://"):
+            raise ValueError("Redis must use TLS (rediss://) in production")
+        return v
+
+
+    @field_validator("app_secret_key")
+    @classmethod
+    def app_secret_key_must_not_be_placeholder(cls, v: str) -> str:
+        import os
+        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me", "change-me-in-prod"}
+        if os.environ.get("APP_ENV", "development") == "production":
+            bad.add("test-secret")
+        if v in bad:
+            raise ValueError(
+                "app_secret_key is a placeholder — set a real 32+ character secret. "
+                "Warning: changing this invalidates all stored passwords."
+            )
+        return v
+
     @field_validator("jwt_secret")
     @classmethod
     def jwt_secret_must_not_be_placeholder(cls, v: str) -> str:
-        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me", "test-secret"}
-        # Allow "test-secret" only in test env — handled at app startup instead
+        import os
+        bad = {"GENERATE_A_REAL_SECRET_DO_NOT_COMMIT", "", "change-me"}
+        # Allow "test-secret" only in test/dev environments
+        if os.environ.get("APP_ENV", "development") == "production":
+            bad.add("test-secret")
+        if v in bad:
+            raise ValueError(
+                "jwt_secret is a placeholder — set a real secret in .env"
+            )
         return v
 
 

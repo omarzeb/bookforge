@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ModelCache
+from app.core.auth import get_current_user
+from app.db.models import ModelCache, User
 from app.db.session import get_db
 from app.services.model_sync import sync_models
 
@@ -32,7 +33,10 @@ class ModelResponse(BaseModel):
 
 
 @router.get("", response_model=list[ModelResponse])
-async def list_models(db: AsyncSession = Depends(get_db)) -> list[ModelCache]:
+async def list_models(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> list[ModelCache]:
     """
     Return the cached model list grouped by tier.
     Triggers a sync if the cache is empty.

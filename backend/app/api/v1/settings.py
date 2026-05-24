@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
 from app.db.models import User
+from app.db.session import get_db
 from app.providers.exceptions import InvalidKey, OutOfCredits
 from app.providers.factory import encrypt_api_key
 from app.providers.openrouter import OpenRouterProvider
@@ -24,7 +24,6 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-from app.core.auth import get_current_user
 
 
 class SaveKeyRequest(BaseModel):
@@ -67,3 +66,15 @@ async def get_key_status(
 ) -> KeyStatusResponse:
     """Returns whether the user has a saved OpenRouter key (not the key itself)."""
     return KeyStatusResponse(has_key=bool(user.encrypted_api_key))
+
+
+@router.delete("/openrouter-key", status_code=204)
+async def delete_openrouter_key(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Remove the stored OpenRouter API key."""
+    user.encrypted_api_key = None
+    db.add(user)
+    await db.commit()
+    logger.info("api_key_deleted", user_id=user.id)

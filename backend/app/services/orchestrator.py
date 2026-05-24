@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Book, BookStatus
 from app.providers.base import LLMProvider
 from app.services import (
-    book_service,
     chapter_service,
     compiler_service,
     outline_service,
@@ -84,7 +83,7 @@ async def run(
         # ── CHAPTERS_GENERATING: generate next pending chapter ────────────────
         if state == BookStatus.CHAPTERS_GENERATING:
             # Ensure chapter records exist
-            count = await chapter_service.initialize_chapters(db, book)
+            await chapter_service.initialize_chapters(db, book)
 
             next_ch = await chapter_service.get_next_pending(db, book.id)
 

@@ -76,7 +76,10 @@ async def list_overrides(
 
 
 @router.get("/defaults/{stage}")
-async def get_default_prompt(stage: str) -> dict:
+async def get_default_prompt(
+    stage: str,
+    _user: User = Depends(get_current_user),
+) -> dict:
     """Return the default system prompt for a stage (for display in the editor)."""
     if stage not in VALID_STAGES:
         raise HTTPException(
@@ -112,7 +115,8 @@ async def get_default_prompt(stage: str) -> dict:
         result = mod.get(**dummy_args[stage])
         return {"stage": stage, "system_prompt": result["system"]}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error("prompt_default_load_failed", stage=stage, error=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to load default prompt") from exc
 
 
 @router.get("/{stage}", response_model=PromptOverrideResponse)

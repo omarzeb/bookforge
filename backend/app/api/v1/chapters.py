@@ -7,10 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.rate_limit import user_limiter
 from app.db.models import BookStatus, Chapter, User
 from app.db.session import get_db
-from app.providers.exceptions import InvalidKey
-from app.providers.factory import get_provider_for_user
 from app.schemas import ChapterResponse, ChapterReviseRequest
 from app.services import book_service, chapter_service
 

@@ -11,23 +11,25 @@ resource "aws_apprunner_service" "api" {
         port = "8080"
 
         runtime_environment_variables = {
-          APP_ENV             = var.environment
-          STORAGE_BACKEND     = "s3"
-          S3_BUCKET           = var.s3_bucket
-          AWS_REGION          = var.region
-          ECS_CLUSTER         = var.ecs_cluster_arn
-          ECS_TASK_DEFINITION = var.ecs_task_definition
-          ECS_SUBNET_IDS      = var.ecs_subnet_ids
+          APP_ENV                = var.environment
+          STORAGE_BACKEND        = "s3"
+          S3_BUCKET              = var.s3_bucket
+          AWS_REGION             = var.region
+          ECS_CLUSTER            = var.ecs_cluster_arn
+          ECS_TASK_DEFINITION    = var.ecs_task_definition
+          ECS_SUBNET_IDS         = var.ecs_subnet_ids
           ECS_SECURITY_GROUP_IDS = var.ecs_security_group_ids
-          APP_INTERNAL_SECRET = var.app_internal_secret
+          FRONTEND_ORIGIN        = var.frontend_origin
         }
 
+        # APP_INTERNAL_SECRET moved here — was in env vars (visible in TF state + console)
         runtime_environment_secrets = {
-          DATABASE_URL   = "${var.secrets_arn_prefix}/database_url"
-          REDIS_URL      = "${var.secrets_arn_prefix}/redis_url"
-          FERNET_KEY     = "${var.secrets_arn_prefix}/fernet_key"
-          JWT_SECRET     = "${var.secrets_arn_prefix}/jwt_secret"
-          APP_SECRET_KEY = "${var.secrets_arn_prefix}/app_secret_key"
+          DATABASE_URL        = "${var.secrets_arn_prefix}/database_url"
+          REDIS_URL           = "${var.secrets_arn_prefix}/redis_url"
+          FERNET_KEY          = "${var.secrets_arn_prefix}/fernet_key"
+          JWT_SECRET          = "${var.secrets_arn_prefix}/jwt_secret"
+          APP_SECRET_KEY      = "${var.secrets_arn_prefix}/app_secret_key"
+          APP_INTERNAL_SECRET = "${var.secrets_arn_prefix}/app_internal_secret"
         }
       }
 
@@ -39,6 +41,9 @@ resource "aws_apprunner_service" "api" {
       access_role_arn = var.access_role_arn
     }
 
+    # WARNING: auto-deploy on :latest means any ECR push goes straight to prod.
+    # Mitigate by: using git-SHA tags (done in CI), not pushing :latest manually,
+    # and restricting ECR push permissions to the CI role only.
     auto_deployments_enabled = true
   }
 

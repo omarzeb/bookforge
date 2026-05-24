@@ -10,13 +10,13 @@ The ID is also returned in the X-Correlation-ID response header so
 the frontend can include it in bug reports.
 """
 
+import re
 import uuid
 from collections.abc import Callable
 
 import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 
 logger = structlog.get_logger(__name__)
 
@@ -27,10 +27,12 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Accept an incoming correlation ID (e.g. from a frontend retry)
         # or generate a fresh one
-        correlation_id = (
-            request.headers.get(CORRELATION_ID_HEADER)
-            or str(uuid.uuid4())[:16]
-        )
+        # Validate incoming ID against safe pattern to prevent log injection
+        incoming = request.headers.get(CORRELATION_ID_HEADER, "")
+        if incoming and re.match(r'^[A-Za-z0-9_-]{1,64}$', incoming):
+            correlation_id = incoming
+        else:
+            correlation_id = str(uuid.uuid4())[:16]
 
         # Bind to structlog context — every log call in this request gets it
         structlog.contextvars.clear_contextvars()

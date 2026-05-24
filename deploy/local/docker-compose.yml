@@ -8,9 +8,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bookforge
-      POSTGRES_PASSWORD: bookforge
-      POSTGRES_DB: bookforge
+      POSTGRES_USER:     ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB:       ${POSTGRES_DB:-bookforge}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,10 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes   # persistence
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -40,8 +43,8 @@ services:
     env_file:
       - ../../backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://bookforge:bookforge@postgres:5432/bookforge
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bookforge}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       STORAGE_BACKEND: local
     volumes:
       - output_data:/app/output
@@ -60,8 +63,8 @@ services:
     env_file:
       - ../../backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://bookforge:bookforge@postgres:5432/bookforge
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bookforge}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       STORAGE_BACKEND: local
     volumes:
       - output_data:/app/output
@@ -100,7 +103,7 @@ services:
     image: eoranged/rq-dashboard:latest
     restart: unless-stopped
     environment:
-      RQ_DASHBOARD_REDIS_URL: redis://redis:6379/0
+      RQ_DASHBOARD_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     depends_on:
       - redis
     # NOT exposed externally — access via Caddy with auth or SSH tunnel only

@@ -13,9 +13,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.rate_limit import user_limiter
 from app.db.models import ModelCache, User
 from app.db.session import get_db
-from app.services.model_tiers import CURATED_MODELS, TIER_ORDER, estimate_book_cost, get_curated_model
+from app.services.model_tiers import CURATED_MODELS, TIER_ORDER, estimate_book_cost
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["models"])
@@ -107,6 +108,7 @@ async def estimate_cost(
     )
 
 
+@user_limiter.limit("2/minute")
 @router.post("/models/sync")
 async def sync_models_endpoint(
     db: AsyncSession = Depends(get_db),

@@ -4,9 +4,8 @@ Phase 7 tests — Fargate task launcher, one-shot runner, reconciliation.
 All AWS calls are mocked — no real boto3/ECS needed.
 """
 
-import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db.session import Base, get_db
 from app.db.redis import get_redis
-from app.db.models import Book, Job, JobStatus, BookStatus
+from app.db.models import Job, JobStatus
 from app.main import app
 from tests.fake_provider import FakeLLMProvider
 
@@ -130,7 +129,6 @@ async def test_launch_task_uses_fargate_in_prod(db_session):
         "failures": [],
     }
 
-    from app.config import AppEnv
     with patch("app.services.task_launcher._is_fargate_available", return_value=True), \
          patch("app.services.task_launcher.settings") as mock_settings, \
          patch("boto3.client", return_value=mock_ecs):

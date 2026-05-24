@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.session import Base
-from app.db.models import Book, BookStatus, Chapter
+from app.db.models import BookStatus
 from app.services import book_service, chapter_service, orchestrator
 from app.services.outline_service import approve_outline, generate_outline
 from app.services.chapter_service import approve_chapter, get_chapters
@@ -45,7 +45,8 @@ def provider():
 @pytest.fixture
 async def user_and_book(db):
     from app.db.models import User
-    import hashlib, bcrypt
+    import hashlib
+    import bcrypt
     pwd = bcrypt.hashpw(
         hashlib.sha256(b"password").hexdigest().encode(), bcrypt.gensalt()
     ).decode()

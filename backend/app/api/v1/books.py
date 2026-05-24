@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.rate_limit import user_limiter
 from app.db.models import Book, BookStatus, OutputFormat, User
 from app.db.session import get_db
 from app.providers.exceptions import InvalidKey
@@ -22,10 +23,12 @@ from app.schemas import (
     FinalReviseRequest,
     OutlineReviseRequest,
 )
-from app.services import book_service, compiler_service, outline_service
+from app.services import book_service, outline_service
 from app.services import job_service
 
 logger = structlog.get_logger(__name__)
+
+
 router = APIRouter(prefix="/books", tags=["books"])
 
 
@@ -59,6 +62,19 @@ async def create_book(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Book:
+    # Validate model_id against known models — prevents bypass of cost tiers
+    if body.selected_model:
+        from app.services.model_tiers import CURATED_MODEL_IDS
+        from sqlalchemy import select as _select
+        from app.db.models import ModelCache as _ModelCache
+        cached = await db.execute(_select(_ModelCache.model_id))
+        known_ids = CURATED_MODEL_IDS | {row[0] for row in cached.fetchall()}
+        if body.selected_model not in known_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="Unknown model — sync models list first via /api/v1/models/sync"
+            )
+
     book = await book_service.create_book(
         db=db,
         user_id=user.id,
@@ -67,9 +83,7 @@ async def create_book(
     )
     # Store notes_before with chapter count hint so outline service picks it up
     notes = body.notes_before or ""
-    if body.chapter_count and body.chapter_count != 10:
-        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
-    elif body.chapter_count:
+    if body.chapter_count and (body.chapter_count != 10 or not notes):
         notes = f"{notes} (write exactly {body.chapter_count} chapters)"
     if notes:
         book.outline_raw = notes
@@ -100,6 +114,7 @@ async def delete_book(
 
 # ── Advance — now async via job queue ────────────────────────────────────────
 
+@user_limiter.limit("10/minute")
 @router.post("/{book_id}/advance", response_model=AdvanceResponse)
 async def advance_book(
     book_id: str,
@@ -130,7 +145,7 @@ async def advance_book(
         try:
             get_provider_for_user(user)  # validate key exists before enqueueing
         except InvalidKey as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         job = await job_service.enqueue_outline(
             db=db,
@@ -205,6 +220,7 @@ async def approve_outline(
     return book
 
 
+@user_limiter.limit("10/minute")
 @router.post("/{book_id}/outline/revise", response_model=AdvanceResponse)
 async def revise_outline(
     book_id: str,
@@ -275,6 +291,7 @@ async def revise_final_review(
 
 # ── Compile + download ────────────────────────────────────────────────────────
 
+@user_limiter.limit("5/minute")
 @router.post("/{book_id}/compile", response_model=AdvanceResponse)
 async def compile_book(
     book_id: str,
@@ -306,8 +323,30 @@ async def download_book(
     if not book.compiled_path:
         raise HTTPException(status_code=404, detail="Book has not been compiled yet")
 
+    from app.config import settings as _settings
+    if _settings.storage_backend.value == "s3":
+        # Generate a presigned S3 URL and redirect
+        import boto3
+        s3 = boto3.client("s3", region_name=_settings.aws_region)
+        try:
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": _settings.aws_s3_bucket, "Key": book.compiled_path},
+                ExpiresIn=300,  # 5 minute download window
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail="Compiled file not found")
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+
     import os
-    if not os.path.exists(book.compiled_path):
+    # Local storage: validate path stays within output directory
+    output_dir = os.path.realpath("/app/output")
+    safe_path = os.path.realpath(book.compiled_path)
+    if not safe_path.startswith(output_dir + os.sep):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not os.path.exists(safe_path):
         raise HTTPException(status_code=404, detail="Compiled file not found on disk")
 
     media_types = {
@@ -317,7 +356,7 @@ async def download_book(
     media_type = media_types.get(book.output_format, "application/octet-stream")
 
     return FileResponse(
-        path=book.compiled_path,
+        path=safe_path,
         media_type=media_type,
         filename=os.path.basename(book.compiled_path),
     )

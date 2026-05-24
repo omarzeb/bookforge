@@ -4,7 +4,7 @@ Worker task functions — one-shot Fargate pattern.
 
 import asyncio
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 
@@ -40,7 +40,7 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
             user = await db.get(User, book.user_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(UTC)
             db.add(job)
             await db.commit()
 
@@ -57,7 +57,7 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(UTC)
                 job.streamed_output = outline
                 db.add(job)
                 await db.commit()
@@ -65,12 +65,12 @@ def generate_outline_task(job_id: str, notes_before: str = "") -> None:
                 logger.info("outline_task_done", job_id=job_id)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("outline_task_failed", job_id=job_id, error=str(exc))
+                logger.error("outline_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.completed_at = datetime.now(UTC)
+                job.error_message = f"Outline generation failed: {type(exc).__name__}"
                 db.add(job)
 
                 book.status = BookStatus.FAILED
@@ -102,7 +102,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
             user = await db.get(User, book.user_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(UTC)
             db.add(job)
             await db.commit()
 
@@ -129,7 +129,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                     if chapter is None:
                         logger.warning("no_pending_chapter", job_id=job_id)
                         job.status = JobStatus.DONE
-                        job.completed_at = datetime.utcnow()
+                        job.completed_at = datetime.now(UTC)
                         job.streamed_output = "No pending chapters found"
                         db.add(job)
                         await db.commit()
@@ -143,7 +143,7 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(UTC)
                 job.streamed_output = chapter.content or ""
                 db.add(job)
                 await db.commit()
@@ -151,12 +151,12 @@ def generate_chapter_task(job_id: str, chapter_number: int = 0) -> None:
                 logger.info("chapter_task_done", job_id=job_id, chapter=chapter.number)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("chapter_task_failed", job_id=job_id, error=str(exc))
+                logger.error("chapter_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.completed_at = datetime.now(UTC)
+                job.error_message = f"Chapter generation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()
 
@@ -168,7 +168,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
     async def _run_async():
         factory = _get_async_session()
         async with factory() as db:
-            from app.db.models import Book, BookStatus, Job, JobStatus, OutputFormat
+            from app.db.models import Book, Job, JobStatus, OutputFormat
             from app.services import compiler_service
 
             job = await db.get(Job, job_id)
@@ -178,7 +178,7 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
             book = await db.get(Book, job.book_id)
 
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow()
+            job.started_at = datetime.now(UTC)
             db.add(job)
             await db.commit()
 
@@ -192,20 +192,20 @@ def compile_book_task(job_id: str, output_format: str = "docx") -> None:
                 await db.commit()
 
                 job.status = JobStatus.DONE
-                job.completed_at = datetime.utcnow()
-                job.streamed_output = f"Compiled: {path}"
+                job.completed_at = datetime.now(UTC)
+                job.streamed_output = "Compiled successfully"  # path intentionally omitted
                 db.add(job)
                 await db.commit()
 
                 logger.info("compile_task_done", job_id=job_id, path=path)
 
             except Exception as exc:
-                error = traceback.format_exc()
-                logger.error("compile_task_failed", job_id=job_id, error=str(exc))
+                logger.error("compile_task_failed", job_id=job_id, error=str(exc),
+                             traceback=traceback.format_exc())
 
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.utcnow()
-                job.error_message = error
+                job.completed_at = datetime.now(UTC)
+                job.error_message = f"Compilation failed: {type(exc).__name__}"
                 db.add(job)
                 await db.commit()
 
