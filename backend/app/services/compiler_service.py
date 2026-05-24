@@ -3,7 +3,6 @@ Compiler service — assembles approved chapters into docx or txt.
 Ported from compiler.py. Accepts a storage_backend dependency.
 """
 
-import re
 from pathlib import Path
 
 import structlog
@@ -47,7 +46,8 @@ async def compile_book(
 
     if settings.storage_backend.value == "s3":
         # Write to a temp file then upload to S3
-        import tempfile, boto3
+        import boto3
+        import tempfile
         with tempfile.NamedTemporaryFile(suffix=f".{output_format.value}", delete=False) as tmp:
             tmp_path = tmp.name
 

@@ -12,9 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ModelCache
 from app.core.auth import get_current_user
-from app.db.models import User
+from app.db.models import ModelCache, User
 from app.db.session import get_db
 from app.services.model_sync import sync_models
 

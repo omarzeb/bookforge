@@ -10,7 +10,7 @@ JWT: PyJWT with HS256, includes iat + jti + iss + aud.
 
 import hmac as _hmac
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt as pyjwt
@@ -54,7 +54,7 @@ def verify_password_constant_time(raw: str, hashed: str | None) -> bool:
 
 
 def create_access_token(user_id: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {
         "sub": user_id,
@@ -87,11 +87,11 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if not user_id:
             raise credentials_exc
-    except pyjwt.PyJWTError:
-        raise credentials_exc
+    except pyjwt.PyJWTError as exc:
+        raise credentials_exc from exc
 
     result = await db.execute(
-        select(User).where(User.id == user_id, User.is_active == True)
+        select(User).where(User.id == user_id, User.is_active.is_(True))
     )
     user = result.scalar_one_or_none()
     if not user:

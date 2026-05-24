@@ -13,7 +13,6 @@ from app.parsers.outline_parser import NUDGE_PROMPT, parse_outline
 from app.parsers.text_cleaner import clean_text
 from app.prompts import resolve_outline
 from app.providers.base import LLMProvider
-from app.services.book_service import update_book_status
 
 logger = structlog.get_logger(__name__)
 

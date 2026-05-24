@@ -13,9 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db.session import Base, get_db
 from app.db.redis import get_redis
-from app.db.models import Book, Job, JobStatus
+from app.db.models import Job, JobStatus
 from app.main import app
-from app.providers.factory import get_provider_for_user
 from tests.fake_provider import FakeLLMProvider
 
 FAKE_OUTLINE = """

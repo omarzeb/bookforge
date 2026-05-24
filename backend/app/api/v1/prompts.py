@@ -116,7 +116,7 @@ async def get_default_prompt(
         return {"stage": stage, "system_prompt": result["system"]}
     except Exception as exc:
         logger.error("prompt_default_load_failed", stage=stage, error=str(exc))
-        raise HTTPException(status_code=500, detail="Failed to load default prompt")
+        raise HTTPException(status_code=500, detail="Failed to load default prompt") from exc
 
 
 @router.get("/{stage}", response_model=PromptOverrideResponse)

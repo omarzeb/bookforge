@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exception_handlers import NotFoundError
-from app.db.models import Book, BookStatus, OutputFormat
+from app.db.models import Book, BookStatus
 
 logger = structlog.get_logger(__name__)
 

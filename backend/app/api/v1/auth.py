@@ -4,13 +4,12 @@ Returns a JWT bearer token used for all subsequent requests.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from app.core.rate_limit import limiter
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.rate_limit import limiter
 
 from app.core.auth import create_access_token, hash_password, verify_password_constant_time
 from app.db.models import User

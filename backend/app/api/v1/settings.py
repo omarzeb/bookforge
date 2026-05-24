@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
 from app.db.models import User
+from app.db.session import get_db
 from app.providers.exceptions import InvalidKey, OutOfCredits
 from app.providers.factory import encrypt_api_key
 from app.providers.openrouter import OpenRouterProvider
@@ -24,7 +24,6 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-from app.core.auth import get_current_user
 
 
 class SaveKeyRequest(BaseModel):

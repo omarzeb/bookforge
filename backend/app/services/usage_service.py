@@ -5,11 +5,10 @@ Called after every LLM generation to record spend.
 This powers the per-user usage dashboard.
 """
 
-import time
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UsageLog
@@ -39,7 +38,7 @@ async def log_usage(
         completion_tokens=completion_tokens,
         cost_usd=cost_usd,
         duration_ms=duration_ms,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(entry)
 
@@ -61,7 +60,7 @@ async def get_usage_summary(
     days: int = 30,
 ) -> dict:
     """Return usage summary for the last N days."""
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
 
     result = await db.execute(
         select(UsageLog)
@@ -71,17 +70,17 @@ async def get_usage_summary(
     )
     logs = result.scalars().all()
 
-    total_cost = sum(l.cost_usd for l in logs)
-    total_tokens = sum(l.prompt_tokens + l.completion_tokens for l in logs)
+    total_cost = sum(entry.cost_usd for entry in logs)
+    total_tokens = sum(entry.prompt_tokens + entry.completion_tokens for entry in logs)
 
     # Group by model
     by_model: dict[str, dict] = {}
-    for l in logs:
-        if l.model not in by_model:
-            by_model[l.model] = {"cost_usd": 0.0, "calls": 0, "tokens": 0}
-        by_model[l.model]["cost_usd"] += l.cost_usd
-        by_model[l.model]["calls"] += 1
-        by_model[l.model]["tokens"] += l.prompt_tokens + l.completion_tokens
+    for entry in logs:
+        if entry.model not in by_model:
+            by_model[entry.model] = {"cost_usd": 0.0, "calls": 0, "tokens": 0}
+        by_model[entry.model]["cost_usd"] += entry.cost_usd
+        by_model[entry.model]["calls"] += 1
+        by_model[entry.model]["tokens"] += entry.prompt_tokens + entry.completion_tokens
 
     return {
         "period_days": days,
@@ -102,15 +101,15 @@ async def get_usage_summary(
         "recent": [
             {
                 "id": l.id,
-                "model": l.model,
-                "stage": l.stage,
-                "prompt_tokens": l.prompt_tokens,
-                "completion_tokens": l.completion_tokens,
-                "cost_usd": l.cost_usd,
-                "duration_ms": l.duration_ms,
-                "created_at": l.created_at.isoformat(),
-                "book_id": l.book_id,
+                "model": entry.model,
+                "stage": entry.stage,
+                "prompt_tokens": entry.prompt_tokens,
+                "completion_tokens": entry.completion_tokens,
+                "cost_usd": entry.cost_usd,
+                "duration_ms": entry.duration_ms,
+                "created_at": entry.created_at.isoformat(),
+                "book_id": entry.book_id,
             }
-            for l in logs[:50]
+            for entry in logs[:50]
         ],
     }

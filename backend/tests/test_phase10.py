@@ -163,7 +163,7 @@ async def test_get_usage_summary_with_data(db_engine):
     from app.services.usage_service import log_usage, get_usage_summary
     factory = async_sessionmaker(db_engine, expire_on_commit=False, class_=AsyncSession)
     async with factory() as db:
-        for i in range(3):
+        for _i in range(3):
             await log_usage(
                 db,
                 user_id="user-1",

@@ -11,8 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.db.session import Base, get_db
 from app.db.redis import get_redis
 from app.main import app
-from app.providers.factory import get_provider_for_user
-from app.db.models import User
 from tests.fake_provider import FakeLLMProvider
 
 FAKE_OUTLINE = """
@@ -217,7 +215,6 @@ async def test_full_book_lifecycle(client):
     assert resp.status_code == 201
     book_id = resp.json()["id"]
 
-    import app.services.orchestrator as orch_module
     import app.api.v1.books as books_module
     from unittest.mock import patch
 

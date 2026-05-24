@@ -17,7 +17,6 @@ from collections.abc import Callable
 import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 
 logger = structlog.get_logger(__name__)
 

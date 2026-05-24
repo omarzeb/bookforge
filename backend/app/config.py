@@ -13,7 +13,7 @@ Usage:
 from enum import Enum
 from functools import lru_cache
 
-from pydantic import AnyUrl, Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -108,11 +108,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_s3_in_production(self) -> "Settings":
-        if self.is_production and self.storage_backend.value == "s3":
-            if not getattr(self, "aws_s3_bucket", ""):
-                raise ValueError(
-                    "AWS_S3_BUCKET must be set when STORAGE_BACKEND=s3 in production"
-                )
+        if self.is_production and self.storage_backend.value == "s3" and not getattr(self, "aws_s3_bucket", ""):
+            raise ValueError(
+                "AWS_S3_BUCKET must be set when STORAGE_BACKEND=s3 in production"
+            )
         return self
 
     @property

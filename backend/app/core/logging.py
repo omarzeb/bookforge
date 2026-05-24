@@ -1,11 +1,8 @@
 import logging
+import re as _re
 import sys
 
 import structlog
-
-
-
-import re as _re
 
 _SENSITIVE_KEYS = _re.compile(
     r'(api_key|password|secret|token|authorization|fernet|jwt|database_url|redis_url)',

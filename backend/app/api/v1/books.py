@@ -5,13 +5,13 @@ advance() now returns a job_id immediately instead of blocking.
 """
 
 import structlog
-from app.core.rate_limit import limiter, user_limiter
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.rate_limit import user_limiter
 from app.db.models import Book, BookStatus, OutputFormat, User
 from app.db.session import get_db
 from app.providers.exceptions import InvalidKey
@@ -23,17 +23,10 @@ from app.schemas import (
     FinalReviseRequest,
     OutlineReviseRequest,
 )
-from app.services import book_service, compiler_service, outline_service
+from app.services import book_service, outline_service
 from app.services import job_service
 
 logger = structlog.get_logger(__name__)
-def _user_key(request):
-    """Rate limit key: authenticated user ID instead of IP."""
-    user = getattr(request.state, "user", None)
-    if user:
-        return str(user.id)
-    from slowapi.util import get_remote_address
-    return get_remote_address(request)
 
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -90,9 +83,7 @@ async def create_book(
     )
     # Store notes_before with chapter count hint so outline service picks it up
     notes = body.notes_before or ""
-    if body.chapter_count and body.chapter_count != 10:
-        notes = f"{notes} (write exactly {body.chapter_count} chapters)"
-    elif body.chapter_count:
+    if body.chapter_count and (body.chapter_count != 10 or not notes):
         notes = f"{notes} (write exactly {body.chapter_count} chapters)"
     if notes:
         book.outline_raw = notes
@@ -154,7 +145,7 @@ async def advance_book(
         try:
             get_provider_for_user(user)  # validate key exists before enqueueing
         except InvalidKey as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         job = await job_service.enqueue_outline(
             db=db,

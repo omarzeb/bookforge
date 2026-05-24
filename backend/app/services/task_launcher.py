@@ -15,7 +15,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import Book, Job, JobStatus
+from app.db.models import Job, JobStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -184,11 +184,11 @@ async def reconcile_stuck_jobs(db: AsyncSession, timeout_minutes: int = 30) -> i
     Called by EventBridge every hour as a defensive measure.
     Returns count of jobs marked failed.
     """
-    from datetime import datetime, timezone, timedelta
-    from sqlalchemy import select, update
+    from datetime import UTC, datetime, timedelta
+    from sqlalchemy import select
     from app.db.models import JobStatus
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+    cutoff = datetime.now(UTC) - timedelta(minutes=timeout_minutes)
 
     result = await db.execute(
         select(Job)

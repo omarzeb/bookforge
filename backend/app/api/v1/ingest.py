@@ -10,8 +10,8 @@ from app.core.auth import get_current_user
 from app.db.models import User
 from app.db.session import get_db
 from app.schemas import BookResponse
-from app.services.ingest_service import ingest_excel
 from app.services.book_service import get_book
+from app.services.ingest_service import ingest_excel
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/books", tags=["ingest"])
@@ -50,7 +50,7 @@ async def ingest_excel_upload(
             selected_model=selected_model,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     await db.commit()
 
